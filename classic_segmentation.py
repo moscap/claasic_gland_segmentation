@@ -8,6 +8,7 @@ from scipy import ndimage as nd
 import time
 import math
 import skimage.measure as skm
+import copy
 
 
 Graph = None
@@ -18,11 +19,8 @@ def parse_way(mask_region, way, frag_map):
     sh = Graph.shape
     for i in range(sh[0]):
         gr = np.uint16(Graph[i, way[i]])
-        
-        segment_map = (frag_map == gr)
-        segment_map = segment_map[:,:,0] * segment_map[:,:,1]
 
-        mask_region[segment_map] += 1
+        mask_region[frag_map[gr[1], gr[0]]] += 1
     return mask_region
         
     
@@ -51,34 +49,36 @@ def sector(dist, angle, rays, dots, radius):
     return np.array([dot_num, min(angle_num, rays - 1)])
 
 def create_frag_map(radius, rays, dots):
+    frag_map = np.zeros((rays, dots, 2 * radius + 1, 2 * radius + 1), dtype = bool)
     frag = np.zeros((2 * radius + 1, 2 * radius + 1, 2))
+    
     for i in range(2 * radius + 1):
         for j in range(2 * radius + 1):
             dist = np.sqrt(float((i - radius)**2 + (j - radius)**2))
             angle = np.angle(complex(i - radius, j - radius))
             frag[i, j] = sector(dist, angle, rays, dots, radius)
-    return frag
+            
+    for i in range(rays):
+        for j in range(dots):
+            segment_map = (frag == np.array([j, i]))
+            segment_map = segment_map[:,:,0] * segment_map[:,:,1]
+            frag_map[i,j] = copy.deepcopy(segment_map)
+            
+            
+    return frag_map
 
 def process_point(ext_im, ext_mask, frag_map, x_c, y_c, rays, dots, radius, lam):
     global Graph
     global Calc_g
     
     image_region = ext_im[x_c:x_c + 2 * radius + 1, y_c:y_c + 2 * radius + 1]
-#    sobel_region = ext_sobel[x_c:x_c + 2 * radius + 1, y_c:y_c + 2 * radius + 1]
     mask_region = np.zeros([2 * radius + 1, 2 * radius + 1], dtype = np.uint16)
     
     for j in range(rays):
-#        summ = 0.0
-        for i in range(dots):
-            segment_map = (frag_map == np.array([i, j]))
-            segment_map = segment_map[:,:,0] * segment_map[:,:,1]
-            
-            mean_intensity = np.mean(image_region[segment_map])
-#            mean_sobel = np.mean(sobel_region[segment_map])
-            
-#            summ += mean_sobel           
-            weight = mean_intensity #+ summ * lam
-            
+        for i in range(dots):            
+            mean_intensity = np.mean(image_region[frag_map[j, i]])
+                     
+            weight = mean_intensity            
             
             Graph[j, i] = [i, j]
             
