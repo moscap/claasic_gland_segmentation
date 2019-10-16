@@ -132,12 +132,10 @@ def make_sp(image, rays, dots, radius):
     ax = axes.ravel()
     
     initialize_graphs(rays, dots)      
-#    sobel = find_sobel(image)
     mask = np.zeros([image.shape[0], image.shape[1]], dtype=np.uint16)
     
     ext_im = np.pad(image, (radius, radius), 'reflect')
     ext_mask = np.pad(mask, (radius, radius), 'reflect')
-#    ext_sobel = np.pad(sobel, (radius, radius), 'reflect')
     frag_map = create_frag_map(radius, rays, dots)
     
     for i in range(0, image.shape[0], 10):
