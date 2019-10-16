@@ -12,12 +12,13 @@ import copy
 
 Calc_g = nx.DiGraph()
 
+#parsing the way and adding changes to mask
 def parse_way(mask_region, way, frag_map, rays):
     for i in range(rays):
         mask_region[frag_map[way[i]]] += 1
     return mask_region
         
-    
+#function that findes way with mimimal sum of node weights 
 def find_min_way(rays, dots):
     global Calc_g
     ans = nx.dijkstra_path_length(Calc_g, 0, rays * dots)
@@ -32,6 +33,7 @@ def find_min_way(rays, dots):
     way = np.array(way)
     return (ans, way)
 
+#assigning number to certain pixel
 def sector(dist, angle, rays, dots, radius):
     dist_k = float(dots) / radius
     dot_num = math.floor(dist * dist_k)
@@ -44,6 +46,8 @@ def sector(dist, angle, rays, dots, radius):
     
     return np.array([dot_num, min(angle_num, rays - 1)])
 
+#creating array containing in each cell a map describing one of the sectors 
+#of the fragmentation map
 def create_frag_map(radius, rays, dots):
     frag_map = np.zeros((rays * dots, 2 * radius + 1, 2 * radius + 1), dtype = bool)
     frag = np.zeros((2 * radius + 1, 2 * radius + 1, 2))
@@ -63,6 +67,7 @@ def create_frag_map(radius, rays, dots):
             
     return frag_map
 
+#single seeding point processing
 def process_point(ext_im, ext_mask, frag_map, x_c, y_c, rays, dots, radius, lam):
     global Calc_g
     
@@ -85,7 +90,7 @@ def process_point(ext_im, ext_mask, frag_map, x_c, y_c, rays, dots, radius, lam)
     ext_mask[x_c:x_c + 2 * radius + 1, y_c:y_c + 2 * radius + 1] += mask_region
     return ext_mask
 
-            
+#main calculation graph initialization             
 def initialize_graphs(rays, dots):
     global Calc_g
     
@@ -99,6 +104,7 @@ def initialize_graphs(rays, dots):
             if i % dots > 0:
                 Calc_g.add_edge(i, i + dots - 1, weight = 1.0)
 
+#finding sobel filter of image
 def find_sobel(image):
     sobelx = np.array(cv.Sobel(image, 3, 1, 0), dtype = np.float)
     sobely = np.array(cv.Sobel(image, 3, 0, 1), dtype = np.float)
