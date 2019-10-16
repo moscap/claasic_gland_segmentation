@@ -10,17 +10,11 @@ import math
 import skimage.measure as skm
 import copy
 
-
-Graph = None
 Calc_g = nx.DiGraph()
 
-def parse_way(mask_region, way, frag_map):
-    global Graph
-    sh = Graph.shape
-    for i in range(sh[0]):
-        gr = np.uint16(Graph[i, way[i]])
-
-        mask_region[frag_map[gr[1], gr[0]]] += 1
+def parse_way(mask_region, way, frag_map, rays):
+    for i in range(rays):
+        mask_region[frag_map[way[i]]] += 1
     return mask_region
         
     
@@ -28,12 +22,14 @@ def find_min_way(rays, dots):
     global Calc_g
     ans = nx.dijkstra_path_length(Calc_g, 0, rays * dots)
     way = nx.dijkstra_path(Calc_g, 0, rays * dots)
+    
     for i in range(1, dots):
         buf_ans = nx.dijkstra_path_length(Calc_g, i, rays * dots + i)
         if buf_ans < ans:
             ans = buf_ans
             way = nx.dijkstra_path(Calc_g, i, rays * dots + i)
-    way = np.array(way) % dots
+            
+    way = np.array(way)
     return (ans, way)
 
 def sector(dist, angle, rays, dots, radius):
@@ -49,7 +45,7 @@ def sector(dist, angle, rays, dots, radius):
     return np.array([dot_num, min(angle_num, rays - 1)])
 
 def create_frag_map(radius, rays, dots):
-    frag_map = np.zeros((rays, dots, 2 * radius + 1, 2 * radius + 1), dtype = bool)
+    frag_map = np.zeros((rays * dots, 2 * radius + 1, 2 * radius + 1), dtype = bool)
     frag = np.zeros((2 * radius + 1, 2 * radius + 1, 2))
     
     for i in range(2 * radius + 1):
@@ -62,34 +58,29 @@ def create_frag_map(radius, rays, dots):
         for j in range(dots):
             segment_map = (frag == np.array([j, i]))
             segment_map = segment_map[:,:,0] * segment_map[:,:,1]
-            frag_map[i,j] = copy.deepcopy(segment_map)
+            frag_map[i * dots + j] = copy.deepcopy(segment_map)
             
             
     return frag_map
 
 def process_point(ext_im, ext_mask, frag_map, x_c, y_c, rays, dots, radius, lam):
-    global Graph
     global Calc_g
     
     image_region = ext_im[x_c:x_c + 2 * radius + 1, y_c:y_c + 2 * radius + 1]
     mask_region = np.zeros([2 * radius + 1, 2 * radius + 1], dtype = np.uint16)
     
-    for j in range(rays):
-        for i in range(dots):            
-            mean_intensity = np.mean(image_region[frag_map[j, i]])
-                     
-            weight = mean_intensity            
+    for i in range(rays * dots):            
+            mean_intensity = np.mean(image_region[frag_map[i]])                     
+            weight = mean_intensity        
             
-            Graph[j, i] = [i, j]
-            
-            if i < dots - 1:
-                Calc_g.edges[j * dots + i, (j + 1) * dots + i + 1]['weight'] = weight
-            Calc_g.edges[j * dots + i, (j + 1) * dots + i]['weight'] = weight
-            if i > 0:
-                Calc_g.edges[j * dots + i, (j + 1) * dots + i - 1]['weight'] = weight
+            if i % dots < dots - 1:
+                Calc_g.edges[i, i + dots + 1]['weight'] = weight
+            Calc_g.edges[i, i + dots]['weight'] = weight
+            if i  % dots > 0:
+                Calc_g.edges[i, i + dots - 1]['weight'] = weight
                 
     (ans, way) = find_min_way(rays, dots)    
-    mask_region = parse_way(mask_region, way, frag_map)
+    mask_region = parse_way(mask_region, way, frag_map, rays)
     
     ext_mask[x_c:x_c + 2 * radius + 1, y_c:y_c + 2 * radius + 1] += mask_region
     return ext_mask
@@ -97,17 +88,16 @@ def process_point(ext_im, ext_mask, frag_map, x_c, y_c, rays, dots, radius, lam)
             
 def initialize_graphs(rays, dots):
     global Calc_g
-    global Graph
-    Graph = np.zeros([rays, dots, 2])
+    
     H = nx.path_graph((rays + 1) * dots)
     Calc_g.add_nodes_from(H)
-    for j in range(rays):
-        for i in range(dots):
-            if i < dots - 1:
-                Calc_g.add_edge(j * dots + i, (j + 1)* dots + i + 1, weight = 1.0)
-            Calc_g.add_edge(j * dots + i, (j + 1)* dots + i, weight = 1.0)
-            if i > 0:
-                Calc_g.add_edge(j * dots + i, (j + 1)* dots + i - 1, weight = 1.0)
+    
+    for i in range(rays * dots):
+            if i % dots < dots - 1:
+                Calc_g.add_edge(i, i + dots + 1, weight = 1.0)
+            Calc_g.add_edge(i, i + dots, weight = 1.0)
+            if i % dots > 0:
+                Calc_g.add_edge(i, i + dots - 1, weight = 1.0)
 
 def find_sobel(image):
     sobelx = np.array(cv.Sobel(image, 3, 1, 0), dtype = np.float)
@@ -115,6 +105,7 @@ def find_sobel(image):
     
     sobel = np.sqrt(sobelx ** 2 + sobely ** 2)
     return sobel
+
 
 def init_dilate_kernel(size_x, size_y):
     dilate_kernel = np.ones((size_x,size_y), dtype = np.uint8)
@@ -137,6 +128,8 @@ def make_sp(image, rays, dots, radius):
     ext_im = np.pad(image, (radius, radius), 'reflect')
     ext_mask = np.pad(mask, (radius, radius), 'reflect')
     frag_map = create_frag_map(radius, rays, dots)
+    
+    return image
     
     for i in range(0, image.shape[0], 10):
         for j in range(0, image.shape[1], 10):
