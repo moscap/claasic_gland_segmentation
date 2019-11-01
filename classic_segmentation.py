@@ -8,7 +8,9 @@ from scipy import ndimage as nd
 import time
 import math
 import skimage.measure as skm
+import skimage.morphology as skmorf
 from skimage.util import invert
+import skimage.feature as skf
 import copy
 
 Calc_g = nx.DiGraph()
@@ -124,30 +126,69 @@ def init_dilate_kernel(size_x, size_y):
     
     return dilate_kernel
 
-def post_process(mask):
-    fig, axes = plt.subplots(ncols=2, figsize=(20, 8), sharex=True, sharey=True)
+def find_blobs(image, filename):
+    img = copy.deepcopy(image)  
+    
+    img30 = nd.gaussian_filter(img, 30)
+    img35 = nd.gaussian_filter(img, 35)
+    img40 = nd.gaussian_filter(img, 40)
+    
+    image = cv.cvtColor(np.uint8(image), cv.COLOR_GRAY2BGR)   
+    
+    blobs_log30 = skf.blob_log(img30, max_sigma=30, num_sigma=10, threshold=.1)
+    # Compute radii in the 3rd column.
+    blobs_log30[:, 2] = blobs_log30[:, 2] * np.sqrt(2)
+    
+    blobs_log35 = skf.blob_log(img35, max_sigma=30, num_sigma=10, threshold=.1)
+    blobs_log35[:, 2] = blobs_log35[:, 2] * np.sqrt(2)
+    
+    blobs_log40 = skf.blob_log(img40, max_sigma=30, num_sigma=10, threshold=.1)
+    blobs_log40[:, 2] = blobs_log40[:, 2] * np.sqrt(2)
+    
+    blobs_list = [blobs_log30, blobs_log35, blobs_log40]
+    colors = ['yellow', 'lime', 'red']
+    titles = ['sigma = 30', 'sigma = 35', 'sigma = 40']
+    sequence = zip(blobs_list, colors, titles)
+    
+    fig, axes = plt.subplots(1, 3, figsize=(20, 8), sharex=True, sharey=True)
     ax = axes.ravel()
     
-    kernel = np.ones((3,3))
-    dilate_kernel = init_dilate_kernel(21,21)
-    smooth_kernel = init_dilate_kernel(5,5)
+    for idx, (blobs, color, title) in enumerate(sequence):
+        ax[idx].set_title(title)
+        ax[idx].imshow(image)
+        for blob in blobs:
+            y, x, r = blob
+            c = plt.Circle((x, y), r, color=color, linewidth=2, fill=False)
+            ax[idx].add_patch(c)
+        ax[idx].set_axis_off()
     
+    plt.tight_layout()
+    plt.savefig("../blobs/" + filename + ".png")
+    plt.show()
+
+def mask_post_process(mask):    
     mask = np.double(mask)
     mask = mask / np.max(np.max(mask))
+    
+    dist_mask = np.where(mask[:,:] < 0.3, 1, 0)
+    distances = nd.distance_transform_edt(dist_mask)
+        
+    mask[distances > 20] = 0
     mask[mask < 0.15] = 0
     mask = np.uint8(mask * 255)
     
-    watershed = np.where(mask[:,:] < 0.1, 1, 0)
-    watershed = nd.label(watershed)[0]
-    watershed = np.uint16(nd.watershed_ift(mask, watershed))
-#    ax[0].imshow(watershed, cmap=plt.cm.gray, interpolation='nearest')
-#    ax[0].set_title('Markers')
-#    
-    maxx = 0
     
-    watershed[watershed > 0] = 1
-#    watershed = nd.binary_dilation(watershed, structure = dilate_kernel)
-    watershed, classes = nd.label(watershed)
+    return mask
+    
+def watershed_post_process(mask):
+    watershed = np.where(mask[:,:] == 0, 1, 0)
+    watershed = nd.label(watershed)[0]
+    watershed = np.uint16(nd.watershed_ift(mask, watershed))#, watershed_line = True))
+    
+    label, classes = nd.label(watershed)
+    
+    
+    maxx = 0
     
     for i in range(1, classes):
         summ = sum(sum(np.where(watershed == i, 1, 0)))
@@ -162,22 +203,39 @@ def post_process(mask):
         if summ <= (0.25 - (0.15 if is_bordered else 0)) * maxx:
             watershed[watershed == i] = 0
             
-    watershed[watershed > 0] = 1        
-    watershed = nd.binary_dilation(watershed, structure = smooth_kernel)
+    #    watershed[watershed > 0] = 1        
+#    watershed = nd.binary_dilation(watershed, structure = smooth_kernel)
+#    
+#    watershed, classes = nd.label(watershed)
+#    
+#    for i in range(1, classes):
+#        segment_map = np.where(watershed == i, 1, 0)
+#        summ = sum(sum(segment_map))
+#        perim = skm.perimeter(segment_map, neighbourhood=8)
+#        
+#        if (float(perim) / np.sqrt(summ)) > 8   :
+#            watershed[watershed == i] = 0
     
-    watershed, classes = nd.label(watershed)
+    return watershed
+
+def post_process(mask, image, filename):
+    fig, axes = plt.subplots(ncols=2, figsize=(20, 8), sharex=True, sharey=True)
+    ax = axes.ravel()
     
-    for i in range(1, classes):
-        segment_map = np.where(watershed == i, 1, 0)
-        summ = sum(sum(segment_map))
-        perim = skm.perimeter(segment_map, neighbourhood=8)
-        
-        if (float(perim) / np.sqrt(summ)) > 8   :
-            watershed[watershed == i] = 0
+    mask = mask_post_process(mask)   
+    watershed = watershed_post_process(mask)
+            
+    ax[0].imshow(mask, cmap=plt.cm.gray, interpolation='nearest')
+    ax[0].set_title('Markers')
+    
+    plt.tight_layout()
+    plt.savefig("../masks/" + filename + ".png")
+    plt.show()  
+    
     return watershed
         
 
-def make_sp(image, rays, dots, radius):      
+def make_sp(image, rays, dots, radius, filename):      
     initialize_graphs(rays, dots)      
     mask = np.zeros([image.shape[0], image.shape[1]], dtype=np.uint16)
     
@@ -189,15 +247,12 @@ def make_sp(image, rays, dots, radius):
     for i in range(0, image.shape[0], 10):
         for j in range(0, image.shape[1], 10):
             ext_mask = process_point(ext_im, ext_mask, frag_map, i, j, rays, dots, radius, 0.0)
-#            print("OK", j, i)
-#    ext_mask = process_point(ext_im, ext_mask, ext_sobel, frag_map, 70, 70, rays, dots, radius, 0.0)
-    mask = ext_mask[radius:-radius, radius:-radius]   
+            
+    mask = ext_mask[radius:-radius, radius:-radius]       
     
+    watershed = post_process(mask, image, filename)
     
-    watershed = post_process(mask)
-    
-    new_im = cv.cvtColor(np.uint8(image), cv.COLOR_GRAY2BGR)
-    
+    new_im = cv.cvtColor(np.uint8(image), cv.COLOR_GRAY2BGR)    
     new_im[watershed > 0, 1:2] = 0
     
 #    cv.imwrite("./wtshd.png", watershed)
@@ -225,20 +280,11 @@ for imagePath in imagePaths:
 if not images[0] is None:
    i = 1
    for img in images:
-       start_time = time.time()
-#       fig, axes = plt.subplots(ncols=2, figsize=(20, 8), sharex=True, sharey=True)
-#       ax = axes.ravel()
+       start_time = time.time()       
        print(img.shape)
        
-       img = make_sp(img, 10, 8, 120)
-       cv.imwrite("../res1/" + str(i) + ".png" , img)
-       i = i + 1
+       img = make_sp(img, 10, 8, 120, str(i))       
+       cv.imwrite("../res/" + str(i) + ".png" , img)
        
-#       ax[0].imshow(img, cmap=plt.cm.gray, interpolation='nearest')
-#       ax[0].set_title('Markers')
-#       for a in ax:
-#           a.set_axis_off()
-#        
-#       fig.tight_layout()
-#       plt.show()
+       i = i + 1       
        print(time.time() - start_time)
