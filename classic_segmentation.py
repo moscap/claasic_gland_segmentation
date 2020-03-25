@@ -9,6 +9,8 @@ import time
 import math
 import skimage.measure as skm
 import skimage.morphology as skmorf
+import skimage.transform as skt
+import skimage.draw as skd
 from skimage.util import invert
 import skimage.feature as skf
 import copy
@@ -108,14 +110,17 @@ def initialize_graphs(rays, dots):
                 Calc_g.add_edge(i, i + dots - 1, weight = 1.0)
 
 #finding sobel filter of image
-def find_sobel(image):
-    sobelx = np.array(cv.Sobel(image, 3, 1, 0), dtype = np.float)
-    sobely = np.array(cv.Sobel(image, 3, 0, 1), dtype = np.float)
+def find_gaussian_gradient(image):
+    gaussy = nd.gaussian_filter1d(image, 2, axis = 0, order = 1 )
+    gaussy = nd.gaussian_filter1d(gaussy, 2, axis = 1, order = 0 )
     
-    sobel = np.sqrt(sobelx ** 2 + sobely ** 2)
+    gaussx = nd.gaussian_filter1d(image, 2, axis = 1, order = 1 )
+    gaussx = nd.gaussian_filter1d(gaussx, 2, axis = 0, order = 0 )
+    
+    sobel = np.arctan2(gaussx, gaussy) / np.pi
     return sobel
 
-
+#generationg dilation kernel with missing corners
 def init_dilate_kernel(size_x, size_y):
     dilate_kernel = np.ones((size_x,size_y), dtype = np.uint8)
     
@@ -124,48 +129,105 @@ def init_dilate_kernel(size_x, size_y):
     dilate_kernel[0, 0] = 0
     dilate_kernel[-1, 0] = 0
     
-    return dilate_kernel
+    return dilate_kernel  
+    
+#returns perimeter of    
+def get_perimeter(image):
+    erosed = nd.binary_erosion(image, np.ones((3,3)))
+    erosed[0, :] = 1.0
+    erosed[-1, :] = 1.0
+    erosed[:, 0] = 1.0
+    erosed[:, -1] = 1.0
+    perim = image - erosed
+    return perim
 
-def find_blobs(image, filename):
-    img = copy.deepcopy(image)  
+#deletes unnecessary pixels from mask
+def clear(mask, angles, perim, perim_mask):
+    #получаем рассматриваемы точки периметра
+    bounds = np.argwhere((perim[1:-1, 1:-1]  > 0) * (perim_mask[1:-1, 1:-1] == 0)) 
+    bounds = bounds + 1
+        
+    for bound in bounds:
+        angle = angles[bound[0], bound[1]]
+        pixel = mask[bound[0], bound[1]]
+        #смотрим на угол, проверяем необходимость удаления из маски     
+        if ((angle <= -0.875) or (angle >= 0.875)) or ((angle >= -0.125) and (angle <= 0.125)):
+            if max(mask[bound[0], bound[1] + 1], mask[bound[0], bound[1] - 1]) > pixel:
+                mask[bound[0], bound[1]] = 0
+        elif ((angle > -0.875) and (angle <= -0.625)) or ((angle > 0.125) and (angle <= 0.375)):
+            if max(mask[bound[0] - 1, bound[1] - 1], mask[bound[0] + 1, bound[1] + 1]) > pixel:
+                mask[bound[0], bound[1]] = 0
+        if ((angle < 0.875) and (angle > 0.625)) or ((angle > -0.375) and (angle < -0.125)):
+            if max(mask[bound[0] + 1, bound[1] - 1], mask[bound[0] - 1, bound[1] + 1]) > pixel:
+                mask[bound[0], bound[1]] = 0
+        else:
+            if max(mask[bound[0] + 1, bound[1]], mask[bound[0] - 1, bound[1]]) > pixel:
+                mask[bound[0], bound[1]] = 0
     
-    img30 = nd.gaussian_filter(img, 30)
-    img35 = nd.gaussian_filter(img, 35)
-    img40 = nd.gaussian_filter(img, 40)
+    return mask
     
-    image = cv.cvtColor(np.uint8(image), cv.COLOR_GRAY2BGR)   
-    
-    blobs_log30 = skf.blob_log(img30, max_sigma=30, num_sigma=10, threshold=.1)
-    # Compute radii in the 3rd column.
-    blobs_log30[:, 2] = blobs_log30[:, 2] * np.sqrt(2)
-    
-    blobs_log35 = skf.blob_log(img35, max_sigma=30, num_sigma=10, threshold=.1)
-    blobs_log35[:, 2] = blobs_log35[:, 2] * np.sqrt(2)
-    
-    blobs_log40 = skf.blob_log(img40, max_sigma=30, num_sigma=10, threshold=.1)
-    blobs_log40[:, 2] = blobs_log40[:, 2] * np.sqrt(2)
-    
-    blobs_list = [blobs_log30, blobs_log35, blobs_log40]
-    colors = ['yellow', 'lime', 'red']
-    titles = ['sigma = 30', 'sigma = 35', 'sigma = 40']
-    sequence = zip(blobs_list, colors, titles)
-    
-    fig, axes = plt.subplots(1, 3, figsize=(20, 8), sharex=True, sharey=True)
-    ax = axes.ravel()
-    
-    for idx, (blobs, color, title) in enumerate(sequence):
-        ax[idx].set_title(title)
-        ax[idx].imshow(image)
-        for blob in blobs:
-            y, x, r = blob
-            c = plt.Circle((x, y), r, color=color, linewidth=2, fill=False)
-            ax[idx].add_patch(c)
-        ax[idx].set_axis_off()
-    
-    plt.tight_layout()
-    plt.savefig("../blobs/" + filename + ".png")
-    plt.show()
+#clearing mask    
+def clear_mask(mask):
+    st_bi_mask = np.where(mask[:,:] > 0, 0.0, 1.0)#начальная бинаризация    
+    prev_label, prev_classes = nd.label(st_bi_mask)#начальная сегментация
+    perim_mask = np.zeros(mask.shape)
+    for j in range(30):
+        bi_mask = np.where(mask[:,:] > 0, 1.0, 0.0)#получили границы
+        angles = find_gaussian_gradient(bi_mask);#получили градиент на границах
+        
+        erosed = nd.binary_erosion(bi_mask, np.ones((3,3)))#провели эрозию
+        erosed[0, :] = 1.0
+        erosed[-1, :] = 1.0
+        erosed[:, 0] = 1.0
+        erosed[:, -1] = 1.0#исключили границы картинки
+        perim = get_perimeter(bi_mask)#поулучили периметр 
+        
+        label, classes = nd.label(1.0 - erosed)#сегментация расширенной картинки
+        if(classes != prev_classes):
+             full_perim = np.argwhere((perim > 0)) #смотрим весь периметр 
+             for pixel in full_perim:
+                 if(perim_mask[pixel[0], pixel[1]] > 0):#если этот пиксель помечен в карте периметра не рассматриваем
+                     continue
+                 maxx = -np.Inf
+                 minn = np.Inf
+                 for m in range(-4,5): #просматриваем "окном" соотвествующего размера
+                     for k in range(-4, 5):
+                         buf = prev_label[min(prev_label.shape[0] - 1, max(0, pixel[0] + m)), 
+                                          min(prev_label.shape[1] - 1, max(0, pixel[1] + k))]
+                         if(buf > 0): 
+                             maxx = max(maxx, buf)
+                             minn = min(minn, buf)
+                     #если встречаются две разные области в одном окне => проводим разделитель               
+                     if (maxx != minn) and (minn != np.Inf):
+                         perim_mask[pixel[0], pixel[1]] = 1.0
+                         mask[pixel[0], pixel[1]] = 1.0
+        print(j)
+        cv.imwrite("../masks/mmask" + str(j) + ".png", mask*255 )#np.where((label > 0) * (get_perimeter(np.where(prev_label > 0, 0.0, 1.0))> 0) ,255.0, 0.0))
+        
+        label[perim_mask > 0] = 0 #немного магии нужной для корректного обновления сегментации
+        label[label > 0] = 1
+        label, classes = nd.label(label)
+        prev_label = label        
+        
+        mask = clear(mask, angles, perim, perim_mask) #удаляем "ненужные" пиксели из маски
+                     
+        opening = copy.deepcopy(mask) #тоже какая то магия
+        opening[opening > 0] = 1
+        opening = skmorf.binary_opening(opening, init_dilate_kernel(3,3))
+        opening[perim_mask > 0] = 1
+        mask = mask * opening
+                     
+                    
+    cl_mask = nd.median_filter(nd.gaussian_filter(mask, 2), 5) * 10000 
+    cl_mask = np.where(cl_mask < 128, 0,1)
+    mask[mask > 0] = 1
+    mask = skmorf.binary_opening(mask, init_dilate_kernel(5,5))
+    mask[perim_mask > 0] = 1
 
+    
+    return mask #< 128, 1, 0))#nd.label(np.where(mask <  0.1, 1.0, 0.0))[0]
+
+#making some basic improvements to mask
 def mask_post_process(mask):    
     mask = np.double(mask)
     mask = mask / np.max(np.max(mask))
@@ -173,18 +235,23 @@ def mask_post_process(mask):
     dist_mask = np.where(mask[:,:] < 0.3, 1, 0)
     distances = nd.distance_transform_edt(dist_mask)
         
-    mask[distances > 20] = 0
+    mask[distances > 30] = 0
+    
+    mask = nd.median_filter(mask, 3)
     mask[mask < 0.15] = 0
-    mask = np.uint8(mask * 255)
+    mask[mask > 0.5] = 1
     
+    cleared = clear_mask(copy.deepcopy(mask))
     
-    return mask
+        
+    return cleared
     
+#
 def watershed_post_process(mask):
     watershed = np.where(mask[:,:] == 0, 1, 0)
     watershed = nd.label(watershed)[0]
-    watershed = np.uint16(nd.watershed_ift(mask, watershed))#, watershed_line = True))
-    
+    watershed = np.uint16(nd.watershed_ift(np.uint8(mask * 255), watershed))
+    #watershed = np.uint16(skmorf.watershed(mask, watershed, watershed_line = True))
     label, classes = nd.label(watershed)
     
     
@@ -216,25 +283,38 @@ def watershed_post_process(mask):
 #        if (float(perim) / np.sqrt(summ)) > 8   :
 #            watershed[watershed == i] = 0
     
-    return watershed
+    return watershed, classes
 
+#post-processing bacis prediction results
 def post_process(mask, image, filename):
     fig, axes = plt.subplots(ncols=2, figsize=(20, 8), sharex=True, sharey=True)
     ax = axes.ravel()
+    print("Post processing is already running..." )
+    new_mask = mask_post_process(copy.deepcopy(mask))   
+    watershed, classes = watershed_post_process(new_mask)
     
-    mask = mask_post_process(mask)   
-    watershed = watershed_post_process(mask)
+    c_watershed = cv.cvtColor(np.uint8(watershed), cv.COLOR_GRAY2BGR) 
+    
+    for i in range(1, classes):
+        c_watershed[watershed == i] = [i, 255 - i, 255]
+    
             
     ax[0].imshow(mask, cmap=plt.cm.gray, interpolation='nearest')
-    ax[0].set_title('Markers')
+    ax[0].set_title('Изображение')
+    ax[1].imshow(mask * new_mask, cmap=plt.cm.gray, interpolation='nearest')
+    ax[1].set_title('Маска')
+    
     
     plt.tight_layout()
     plt.savefig("../masks/" + filename + ".png")
     plt.show()  
     
-    return watershed
+    cv.imwrite("../masks/mmask.png" , new_mask * 255)
+    
+    return watershed, new_mask
         
 
+#basic function colltiolling prediction process
 def make_sp(image, rays, dots, radius, filename):      
     initialize_graphs(rays, dots)      
     mask = np.zeros([image.shape[0], image.shape[1]], dtype=np.uint16)
@@ -250,14 +330,19 @@ def make_sp(image, rays, dots, radius, filename):
             
     mask = ext_mask[radius:-radius, radius:-radius]       
     
-    watershed = post_process(mask, image, filename)
+    watershed, new_mask = post_process(mask, image, filename)
+    watershed[watershed > 0] = 1
+#    kernel = init_dilate_kernel(5,5)
+#    watershed = nd.binary_dilation(watershed, kernel)   
+    
     
     new_im = cv.cvtColor(np.uint8(image), cv.COLOR_GRAY2BGR)    
     new_im[watershed > 0, 1:2] = 0
+     
     
-#    cv.imwrite("./wtshd.png", watershed)
+    #cv.imwrite("./wtshd.png", watershed)
           
-    return new_im
+    return watershed
         
  
 # construct the argument parser and parse the arguments
@@ -275,6 +360,7 @@ for imagePath in imagePaths:
     data = cv.imread(imagePath)
     data = cv.cvtColor(data, cv.COLOR_BGR2GRAY)
     data = np.float64(data)
+    # data = cv.resize(data, (726, 544), interpolation = cv.INTER_AREA)
     images.append(data)
 
 if not images[0] is None:
