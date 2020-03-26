@@ -98,7 +98,7 @@ def valGenerator(image_path, mask_path):
     yield (img,mask)
 
 def train(train_path, validation_path, epochs = 100, batch_size = 32, 
-          checkpoint_file = './checkpoint.hdf5', statistic_folder = './stat', save_to_dir = None):
+          checkpoint_file = './checkpoint.hdf5', statistic_folder = None, save_to_dir = None):
     
     epochs = int(epochs)
     batch_size = int(batch_size)
@@ -118,18 +118,25 @@ def train(train_path, validation_path, epochs = 100, batch_size = 32,
     
     myGene = trainGenerator(batch_size, train_path, data_gen_args, save_to_dir = None)
     valGene = trainGenerator(8, validation_path, data_val_args, save_to_dir = None)
+    
     model = mynet()
     model_checkpoint = ModelCheckpoint(checkpoint_file, monitor='loss',
                                        verbose=1, save_best_only=True)
+    
     early_stopping = EarlyStopping(monitor='loss', patience=7) #patience provides number of epocs befour this function will be activated
     reduce_lr = ReduceLROnPlateau(monitor='val_loss', factor=0.2, patience=5, min_lr=0.000001) #factor is a scaling fator to learning rate
-    csv_logger = CSVLogger(statistic_folder + '/history.csv')
-    tensorboard_logger = TensorBoard(log_dir= statistic_folder +'/tensorboard', histogram_freq=1, batch_size=32,
-                                                                    write_graph=True, write_grads=False, write_images=False,
-                                                                    embeddings_freq=0, embeddings_layer_names=None,
-                                                                    embeddings_metadata=None, embeddings_data=None, update_freq='epoch')
+    
+    callback_list = [early_stopping, reduce_lr]
+    if statistic_folder != None:
+        csv_logger = CSVLogger(statistic_folder + '/history.csv')
+        # tensorboard_logger = TensorBoard(log_dir= statistic_folder +'/tensorboard', histogram_freq=1, batch_size=32,
+        #                                                                 write_graph=True, write_grads=False, write_images=False,
+        #                                                                 embeddings_freq=0, embeddings_layer_names=None,
+        #                                                                 embeddings_metadata=None, embeddings_data=None, update_freq='epoch')
+        callback_list.append(csv_logger)
+        
     model.fit_generator(myGene,steps_per_epoch=1000,epochs=epochs,
-                        callbacks=[model_checkpoint, early_stopping, reduce_lr, csv_logger], 
+                        callbacks=callback_list, 
                         validation_data = valGene, validation_steps=400)
 
 ap = argparse.ArgumentParser()
