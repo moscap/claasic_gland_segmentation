@@ -98,7 +98,10 @@ def valGenerator(image_path, mask_path):
     yield (img,mask)
 
 def train(train_path, validation_path, epochs = 100, batch_size = 32, 
-          checpoint_file = './checkpoint.hdf5', statistic_folder = './stat', save_to_dir = None):
+          checkpoint_file = './checkpoint.hdf5', statistic_folder = './stat', save_to_dir = None):
+    
+    epochs = int(epochs)
+    batch_size = int(batch_size)
     
     data_gen_args = dict(vertical_flip=True,
                     horizontal_flip=True,
@@ -116,7 +119,7 @@ def train(train_path, validation_path, epochs = 100, batch_size = 32,
     myGene = trainGenerator(batch_size, train_path, data_gen_args, save_to_dir = None)
     valGene = trainGenerator(8, validation_path, data_val_args, save_to_dir = None)
     model = mynet()
-    model_checkpoint = ModelCheckpoint(checpoint_file, monitor='loss',
+    model_checkpoint = ModelCheckpoint(checkpoint_file, monitor='loss',
                                        verbose=1, save_best_only=True)
     early_stopping = EarlyStopping(monitor='loss', patience=7) #patience provides number of epocs befour this function will be activated
     reduce_lr = ReduceLROnPlateau(monitor='val_loss', factor=0.2, patience=5, min_lr=0.000001) #factor is a scaling fator to learning rate
@@ -134,9 +137,9 @@ ap.add_argument("-t", "--train", required=True,
 	help="path to train dataset of images")
 ap.add_argument("-v", "--validation", required=True,
 	help="path to validation dataset of images")
-ap.add_argument("-b", "--batchsize", required=True,
+ap.add_argument("-b", "--batchsize", required=False,
 	help="number of images in one batch")
-ap.add_argument("-e", "--epochs", required=True,
+ap.add_argument("-e", "--epochs", required=False,
 	help="number of epochs")
 ap.add_argument("-c", "--checkpoint", required=False,
 	help="path to checkpoint hdf5 file")
@@ -145,7 +148,18 @@ ap.add_argument("-stat", "--statistics", required=False,
 
 args = vars(ap.parse_args())
 
-train(args["train"], args["validation"], int(args["epochs"]), 
-      int(args["batchsize"]), args["checkpoint"], args["statistics"])
+train_args = dict(train_path = args["train"],
+                  validation_path = args["validation"])
 
+if args["epochs"] != None:
+    train_args["epochs"] = args["epochs"]
+if args["batchsize"] != None:
+    train_args["batch_size"] = args["batchsize"]
+if args["checkpoint"] != None:
+    train_args["checkpoint_file"] = args["checkpoint"]
+if args["statistics"] != None:
+    train_args["statistic_folder"] = args["statistics"]
+    
+
+train(**train_args)
 
