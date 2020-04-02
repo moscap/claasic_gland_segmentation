@@ -1,22 +1,11 @@
 import numpy as np
-import cv2 as cv
 import networkx as nx
-import argparse
-import matplotlib.pyplot as plt
-from imutils import paths
-from scipy import ndimage as nd 
-import time
 import math
-import skimage.measure as skm
-import skimage.morphology as skmorf
-import skimage.transform as skt
-import skimage.draw as skd
-from skimage.util import invert
-import skimage.feature as skf
 import copy
-import skimage.io as io
-import random
-import os
+
+
+STEP = 10
+LAMBDA = 0.0
 
 #parsing the way and adding changes to mask
 def parse_way(mask_region, way, frag_map, rays):
@@ -117,11 +106,11 @@ def find_bound_mask(image, rays, dots, radius):
     frag_map = create_frag_map(radius, rays, dots)
     
     
-    for i in range(0, image.shape[0], 10):
-        for j in range(0, image.shape[1], 10):
+    for i in range(0, image.shape[0], STEP):
+        for j in range(0, image.shape[1], STEP):
             ext_mask, Calc_g = process_point(Calc_g, ext_im, ext_mask, 
                                              frag_map, i, j, rays, dots, 
-                                             radius, 0.0)
+                                             radius, LAMBDA)
             
     mask = ext_mask[radius:-radius, radius:-radius]
     return mask
