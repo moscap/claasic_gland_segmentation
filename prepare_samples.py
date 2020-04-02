@@ -66,41 +66,42 @@ def segmentation_foo(image, mask, path, i): #constructing "gland" samples
     return i
 
 
-ap = argparse.ArgumentParser()
-ap.add_argument("-i", "--images", required=True,
-	help="path to dataset of images")
-ap.add_argument("-m", "--masks", required=True,
-	help="path to dataset of masks")
-ap.add_argument("-g", "--glands", required=True,
-	help="path to save glands patterns")
-ap.add_argument("-ng", "--nonglands", required=True,
-	help="path to save non-glands patterns")
-
-args = vars(ap.parse_args())
-
-images = []
-masks = []
-
-imagePaths = sorted(list(paths.list_images(args["images"]))) #reading images and annotations paths 
-maskPaths = sorted(list(paths.list_images(args["masks"])))
-
-i = np.int(0)
-for imagePath, maskPath in zip(imagePaths, maskPaths):
-    print(imagePath + " - " + maskPath)
-    img = cv.imread(imagePath)
-    img = cv.cvtColor(img, cv.COLOR_BGR2GRAY)
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("-i", "--images", required=True,
+    	help="path to dataset of images")
+    ap.add_argument("-m", "--masks", required=True,
+    	help="path to dataset of masks")
+    ap.add_argument("-g", "--glands", required=True,
+    	help="path to save glands patterns")
+    ap.add_argument("-ng", "--nonglands", required=True,
+    	help="path to save non-glands patterns")
     
-    mask = cv.imread(maskPath)
-    mask = cv.cvtColor(mask, cv.COLOR_BGR2GRAY)
-    for k in range(4): # "flip" augmentations
-        if k / 2 == 1:
-            cv.flip(img, 0)
-            cv.flip(mask, 0)
-            
-        if k % 2 == 1:
-            cv.flip(img, 1)
-            cv.flip(mask, 1)
-        j = segmentation_foo(img, mask, args["glands"], i) #generating "gland" regions
-        bad_foo(img, mask, args["nonglands"], i, j - i) #and "nongland" regions here
-        i = copy.deepcopy(j)
-print(i)
+    args = vars(ap.parse_args())
+    
+    imagePaths = sorted(list(paths.list_images(args["images"]))) #reading images and annotations paths 
+    maskPaths = sorted(list(paths.list_images(args["masks"])))
+    
+    i = np.int(0)
+    for imagePath, maskPath in zip(imagePaths, maskPaths):
+        print(imagePath + " - " + maskPath)
+        img = cv.imread(imagePath)
+        img = cv.cvtColor(img, cv.COLOR_BGR2GRAY)
+        
+        mask = cv.imread(maskPath)
+        mask = cv.cvtColor(mask, cv.COLOR_BGR2GRAY)
+        for k in range(4): # "flip" augmentations
+            if k / 2 == 1:
+                cv.flip(img, 0)
+                cv.flip(mask, 0)
+                
+            if k % 2 == 1:
+                cv.flip(img, 1)
+                cv.flip(mask, 1)
+            j = segmentation_foo(img, mask, args["glands"], i) #generating "gland" regions
+            bad_foo(img, mask, args["nonglands"], i, j - i) #and "nongland" regions here
+            i = copy.deepcopy(j)
+    print(i)
+
+if __name__ == "__main__":
+    main()
