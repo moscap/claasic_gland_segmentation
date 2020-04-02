@@ -14,6 +14,10 @@ import skimage.draw as skd
 from skimage.util import invert
 import skimage.feature as skf
 import copy
+import skimage.io as io
+import random
+import os
+import ML.test as ml
 
 Calc_g = nx.DiGraph()
 
@@ -165,13 +169,12 @@ def clear(mask, angles, perim, perim_mask):
                 mask[bound[0], bound[1]] = 0
     
     return mask
-    
-#clearing mask    
+
 def clear_mask(mask):
     st_bi_mask = np.where(mask[:,:] > 0, 0.0, 1.0)#начальная бинаризация    
     prev_label, prev_classes = nd.label(st_bi_mask)#начальная сегментация
     perim_mask = np.zeros(mask.shape)
-    for j in range(30):
+    for j in range(15):
         bi_mask = np.where(mask[:,:] > 0, 1.0, 0.0)#получили границы
         angles = find_gaussian_gradient(bi_mask);#получили градиент на границах
         
@@ -190,8 +193,8 @@ def clear_mask(mask):
                      continue
                  maxx = -np.Inf
                  minn = np.Inf
-                 for m in range(-4,5): #просматриваем "окном" соотвествующего размера
-                     for k in range(-4, 5):
+                 for m in range(-8,9): #просматриваем "окном" соотвествующего размера
+                     for k in range(-8, 9):
                          buf = prev_label[min(prev_label.shape[0] - 1, max(0, pixel[0] + m)), 
                                           min(prev_label.shape[1] - 1, max(0, pixel[1] + k))]
                          if(buf > 0): 
@@ -223,7 +226,68 @@ def clear_mask(mask):
     mask[mask > 0] = 1
     mask = skmorf.binary_opening(mask, init_dilate_kernel(5,5))
     mask[perim_mask > 0] = 1
-
+    
+    return mask #< 128, 1, 0))#nd.label(np.where(mask <  0.1, 1.0, 0.0))[0]
+    
+#clearing mask    
+def clearr_mask(mask):
+    st_bi_mask = np.where(mask[:,:] > 0, 0.0, 1.0)#начальная бинаризация    
+    prev_label, prev_classes = nd.label(st_bi_mask)#начальная сегментация
+    perim_mask = np.zeros(mask.shape)
+    for j in range(15):
+        bi_mask = np.where(mask[:,:] > 0, 1.0, 0.0)#получили границы
+        angles = find_gaussian_gradient(bi_mask);#получили градиент на границах
+        
+        erosed = nd.binary_erosion(bi_mask, np.ones((3,3)))#провели эрозию
+        erosed[0, :] = 1.0
+        erosed[-1, :] = 1.0
+        erosed[:, 0] = 1.0
+        erosed[:, -1] = 1.0#исключили границы картинки
+        perim = get_perimeter(bi_mask)#поулучили периметр 
+        
+        label, classes = nd.label(1.0 - erosed)#сегментация расширенной картинки
+        if(classes != prev_classes):
+             full_perim = np.argwhere((perim > 0)) #смотрим весь периметр 
+             for pixel in full_perim:
+                 if(perim_mask[pixel[0], pixel[1]] > 0):#если этот пиксель помечен в карте периметра не рассматриваем
+                     continue
+                 if pixel[0] == 0 or pixel[0] == label.shape[0] - 1 or pixel[1] == 0 or pixel[1] == label.shape[1] - 1:
+                     continue
+                 maxx = -np.Inf
+                 minn = np.Inf
+                 for m in range(-6,7): #просматриваем "окном" соотвествующего размера
+                     for k in range(-6, 7):
+                         buf = prev_label[min(prev_label.shape[0] - 1, max(0, pixel[0] + m)), 
+                                          min(prev_label.shape[1] - 1, max(0, pixel[1] + k))]
+                         if(buf > 0): 
+                             maxx = max(maxx, buf)
+                             minn = min(minn, buf)
+                     #если встречаются две разные области в одном окне => проводим разделитель               
+                     if (maxx != minn) and (minn != np.Inf):
+                         perim_mask[pixel[0], pixel[1]] = 1.0
+                         mask[pixel[0], pixel[1]] = 1.0
+        print(j)
+        cv.imwrite("../masks/mmask" + str(j) + ".png", mask*255 )#np.where((label > 0) * (get_perimeter(np.where(prev_label > 0, 0.0, 1.0))> 0) ,255.0, 0.0))
+        
+        label[perim_mask > 0] = 0 #немного магии нужной для корректного обновления сегментации
+        label[label > 0] = 1
+        label, classes = nd.label(label)
+        prev_label = label        
+        
+        mask = clear(mask, angles, perim, perim_mask) #удаляем "ненужные" пиксели из маски
+                     
+        opening = copy.deepcopy(mask) #тоже какая то магия
+        opening[opening > 0] = 1
+        opening = skmorf.binary_opening(opening, init_dilate_kernel(3,3))
+        opening[perim_mask > 0] = 1
+        mask = mask * opening
+                     
+                    
+    cl_mask = nd.median_filter(nd.gaussian_filter(mask, 2), 5) * 10000 
+    cl_mask = np.where(cl_mask < 128, 0,1)
+    mask[mask > 0] = 1
+    mask = skmorf.binary_opening(mask, init_dilate_kernel(5,5))
+    mask[perim_mask > 0] = 1
     
     return mask #< 128, 1, 0))#nd.label(np.where(mask <  0.1, 1.0, 0.0))[0]
 
@@ -232,7 +296,7 @@ def mask_post_process(mask):
     mask = np.double(mask)
     mask = mask / np.max(np.max(mask))
     
-    dist_mask = np.where(mask[:,:] < 0.3, 1, 0)
+    dist_mask = np.where(mask < 0.3, 1, 0)
     distances = nd.distance_transform_edt(dist_mask)
         
     mask[distances > 30] = 0
@@ -241,19 +305,43 @@ def mask_post_process(mask):
     mask[mask < 0.15] = 0
     mask[mask > 0.5] = 1
     
+    
     cleared = clear_mask(copy.deepcopy(mask))
     
         
     return cleared
     
-#
-def watershed_post_process(mask):
-    watershed = np.where(mask[:,:] == 0, 1, 0)
-    watershed = nd.label(watershed)[0]
-    watershed = np.uint16(nd.watershed_ift(np.uint8(mask * 255), watershed))
-    #watershed = np.uint16(skmorf.watershed(mask, watershed, watershed_line = True))
-    label, classes = nd.label(watershed)
+def ML_foo(watershed, image):
+    mask = np.where(watershed > 0, 1, 0)
+    label, classes = nd.label(mask)
     
+    samples = []    
+    
+    for j in range(1, classes + 1):
+        buf_mask = np.uint8(np.where(label == j, 1, 0)) #picking out concrete region
+        contours, hierarchy = cv.findContours(buf_mask,cv.RETR_LIST,cv.CHAIN_APPROX_SIMPLE)[-2:] #finding it's countour in open-cv format
+        idx = 0
+        for cnt in contours:
+            idx += 1
+            x,y,w,h = cv.boundingRect(cnt) #making bounding rect
+            samples.append(image[y:y+h, x:x+w])
+            
+            
+    predicted = ml.predict(ml.containerTestGenerator(samples), "D:\программы\Glands\Diploma\classic_gland_segmentation\ML\32B3L.hdf5", len(samples))
+    for idx, pred in enumerate(predicted):
+        if np.argmax(pred) == 1:
+            label[label == idx + 1] = 0
+    return label
+    
+#posttprocessing watershed
+def watershed_post_process(mask):
+    watershed = np.where(mask == 0, 1, 0)
+    watershed = nd.label(watershed)[0]
+    watershed = nd.watershed_ift(np.uint16(np.where(mask > 0, 1, 0)), watershed)
+    #watershed = np.uint16(skmorf.watershed(mask, watershed, watershed_line = True))
+    watershed = np.where(watershed > 1, 255, 0)
+    
+    label, classes = nd.label(watershed)
     
     maxx = 0
     
@@ -267,47 +355,42 @@ def watershed_post_process(mask):
         summ = sum(segment[:, -1]) + sum(segment[:, 0]) + sum(segment[-1, :]) + sum(segment[0, :])
         is_bordered = (summ) > 0 
         summ = sum(sum(segment))
-        if summ <= (0.25 - (0.15 if is_bordered else 0)) * maxx:
+        if summ <= (0.10 - (0.07 if is_bordered else 0)) * maxx:
             watershed[watershed == i] = 0
             
-    #    watershed[watershed > 0] = 1        
-#    watershed = nd.binary_dilation(watershed, structure = smooth_kernel)
-#    
-#    watershed, classes = nd.label(watershed)
-#    
-#    for i in range(1, classes):
-#        segment_map = np.where(watershed == i, 1, 0)
-#        summ = sum(sum(segment_map))
-#        perim = skm.perimeter(segment_map, neighbourhood=8)
-#        
-#        if (float(perim) / np.sqrt(summ)) > 8   :
-#            watershed[watershed == i] = 0
+    fig, axes = plt.subplots(ncols=2, figsize=(20, 8), sharex=True, sharey=True)
+    ax = axes.ravel()
+    ax[0].imshow(watershed * 255, cmap=plt.cm.gray, interpolation='nearest')
+    ax[0].set_title('Изображение')
+    plt.tight_layout()
+    plt.show()  
     
     return watershed, classes
 
 #post-processing bacis prediction results
 def post_process(mask, image, filename):
+    print("Post processing is already running..." )
+    
+    new_mask = mask_post_process(copy.deepcopy(mask))  
+    mmask = copy.deepcopy(mask * new_mask)         
+    watershed, classes = watershed_post_process(mmask)
+    watershed = ML_foo(watershed, image)
+      
     fig, axes = plt.subplots(ncols=2, figsize=(20, 8), sharex=True, sharey=True)
     ax = axes.ravel()
-    print("Post processing is already running..." )
-    new_mask = mask_post_process(copy.deepcopy(mask))   
-    watershed, classes = watershed_post_process(new_mask)
+    ax[0].imshow(mask, cmap=plt.cm.gray, interpolation='nearest')
+    ax[0].set_title('Маска до очистки')
+    ax[1].imshow(mask * new_mask, cmap=plt.cm.gray, interpolation='nearest')
+    ax[1].set_title('Очищенная маска')  
+    plt.tight_layout()
+    plt.savefig("../masks/" + filename + ".png")
+    plt.show()
     
     c_watershed = cv.cvtColor(np.uint8(watershed), cv.COLOR_GRAY2BGR) 
     
-    for i in range(1, classes):
+    for i in range(1, classes + 1):
         c_watershed[watershed == i] = [i, 255 - i, 255]
     
-            
-    ax[0].imshow(mask, cmap=plt.cm.gray, interpolation='nearest')
-    ax[0].set_title('Изображение')
-    ax[1].imshow(mask * new_mask, cmap=plt.cm.gray, interpolation='nearest')
-    ax[1].set_title('Маска')
-    
-    
-    plt.tight_layout()
-    plt.savefig("../masks/" + filename + ".png")
-    plt.show()  
     
     cv.imwrite("../masks/mmask.png" , new_mask * 255)
     
@@ -342,7 +425,7 @@ def make_sp(image, rays, dots, radius, filename):
     
     #cv.imwrite("./wtshd.png", watershed)
           
-    return watershed
+    return new_im
         
  
 # construct the argument parser and parse the arguments
@@ -370,7 +453,7 @@ if not images[0] is None:
        print(img.shape)
        
        img = make_sp(img, 10, 8, 120, str(i))       
-       cv.imwrite("../res/" + str(i) + ".png" , img)
+       cv.imwrite("../res/" + str(i) + ".png" , img * 255)
        
        i = i + 1       
        print(time.time() - start_time)
