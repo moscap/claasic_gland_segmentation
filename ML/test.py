@@ -9,6 +9,10 @@ import platform
 
 NONGLANDS = 'nonglands'
 GLANDS = 'glands'
+RESIZE_SHAPE = (256, 256)
+PERSENTS = 100
+SHAPE_CORRECTION = (1,)
+VERBOSE = 1
 
 LINUX = 'Linux'
 WINDOWS = 'Windows'
@@ -16,23 +20,23 @@ WINDOWS = 'Windows'
 def fileTestGenerator(test_path, as_gray = True):
     imagePaths = sorted(list(paths.list_images(test_path)))
     for imgPath in imagePaths:
-        img = io.imread(imgPath,as_gray = as_gray)
-        img = cv.resize(img, (256, 256), interpolation = cv.INTER_LINEAR)
-        img = np.reshape(img,img.shape+(1,))
-        img = np.reshape(img,(1,)+img.shape)
+        img = io.imread(imgPath, as_gray = as_gray)
+        img = cv.resize(img, RESIZE_SHAPE, interpolation = cv.INTER_LINEAR)
+        img = np.reshape(img, img.shape + SHAPE_CORRECTION)
+        img = np.reshape(img, SHAPE_CORRECTION + img.shape)
         yield img
         
 def containerTestGenerator(samples):
     for sample in samples:
-        img = cv.resize(sample, (256, 256), interpolation = cv.INTER_LINEAR)
-        img = np.reshape(img,img.shape+(1,))
-        img = np.reshape(img,(1,)+img.shape)
+        img = cv.resize(sample, RESIZE_SHAPE, interpolation = cv.INTER_LINEAR)
+        img = np.reshape(img, img.shape + SHAPE_CORRECTION)
+        img = np.reshape(img, SHAPE_CORRECTION + img.shape)
         yield img
         
 def predict(testGene, weights_path, lenth):
     model = mynet()
     model.load_weights(weights_path)
-    results = model.predict_generator(testGene, lenth, verbose=1)
+    results = model.predict_generator(testGene, lenth, verbose=VERBOSE)
     return results
     
 def main():
@@ -58,7 +62,7 @@ def main():
       if pred == GLANDS and ans == 0:
           right = right + 1
       
-    print(right * 100 / len(imagePaths))
+    print(right * PERSENTS / len(imagePaths))
 
 if __name__ == "__main__":
     main()
