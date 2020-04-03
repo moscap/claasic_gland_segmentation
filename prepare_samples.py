@@ -25,6 +25,7 @@ GENERATING_MAX_SIZE = 250
 GENERATING_MIN_SIZE = 1
 BIAS_PORTION = 0.1
 BIG_SHIFT_STEP = 3
+ROTATION_STEP = 3
 STEPS_TO_TRY = 10
 AUG_STEPS = 32
 
@@ -36,10 +37,11 @@ def bad_foo(image, mask, path, i, j): #finding "nongland" regions
     num = 0
     
     while num < j: #doing actions until desired number of "nongland" regions were riched
-        angle = np.random.randint(0, len(ROTATION_ANGLES))
-        angle = ROTATION_ANGLES[angle]
-        image = imutils.rotate_bound(image, angle)
-        mask = imutils.rotate_bound(mask, angle)
+        if num % ROTATION_STEP == 0:
+            angle = np.random.randint(0, len(ROTATION_ANGLES))
+            angle = ROTATION_ANGLES[angle]
+            image = imutils.rotate_bound(image, angle)
+            mask = imutils.rotate_bound(mask, angle)
     
         x = np.random.randint(0, image.shape[AXIS_X] - 1) #generating random x,y,w,h
         y = np.random.randint(0, image.shape[AXIS_Y] - 1)        
@@ -111,10 +113,10 @@ def segmentation_foo(image, mask, path, i): #constructing "gland" samples
                     bx, by = np.random.randint(-small_bias, small_bias, 2) #random modificaions for big shift
                     
                     if w > h:
-                        bw = np.random.randint(-6 * bias, -4 * bias)
+                        bw = np.random.randint(-7 * bias, -5 * bias)
                         bh = np.random.randint(-small_bias, 0)
                     else:
-                        bh = np.random.randint(-6 * bias, -4 * bias)
+                        bh = np.random.randint(-7 * bias, -5 * bias)
                         bw = np.random.randint(-small_bias, 0)
                         
                     k = check_sample_with_bias(image, label, path, x, y, w, h, bx, by, bw, bh, i)
