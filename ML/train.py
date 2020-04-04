@@ -112,34 +112,37 @@ def train(train_path, validation_path, epochs = 100, batch_size = 32,
                         callbacks=callback_list, 
                         validation_data = valGene, validation_steps=1000)
 
-ap = argparse.ArgumentParser()
-ap.add_argument("-t", "--train", required=True,
-	help="path to train dataset of images")
-ap.add_argument("-v", "--validation", required=True,
-	help="path to validation dataset of images")
-ap.add_argument("-b", "--batchsize", required=False,
-	help="number of images in one batch")
-ap.add_argument("-e", "--epochs", required=False,
-	help="number of epochs")
-ap.add_argument("-c", "--checkpoint", required=False,
-	help="path to checkpoint hdf5 file")
-ap.add_argument("-stat", "--statistics", required=False,
-	help="statistics folder")
-
-args = vars(ap.parse_args())
-
-train_args = dict(train_path = args["train"],
-                  validation_path = args["validation"])
-
-if args["epochs"] != None:
-    train_args["epochs"] = args["epochs"]
-if args["batchsize"] != None:
-    train_args["batch_size"] = args["batchsize"]
-if args["checkpoint"] != None:
-    train_args["checkpoint_file"] = args["checkpoint"]
-if args["statistics"] != None:
-    train_args["statistic_folder"] = args["statistics"]
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("-t", "--train", required=True,
+    	help="path to train dataset of images")
+    ap.add_argument("-v", "--validation", required=True,
+    	help="path to validation dataset of images")
+    ap.add_argument("-b", "--batchsize", required=False,
+    	help="number of images in one batch")
+    ap.add_argument("-e", "--epochs", required=False,
+    	help="number of epochs")
+    ap.add_argument("-c", "--checkpoint", required=False,
+    	help="path to checkpoint hdf5 file")
+    ap.add_argument("-stat", "--statistics", required=False,
+    	help="statistics folder")
+    
+    args = vars(ap.parse_args())
+    
+    train_args = dict(train_path = args["train"],
+                      validation_path = args["validation"])
+    
+    if args["epochs"] != None:
+        train_args["epochs"] = args["epochs"]
+    if args["batchsize"] != None:
+        train_args["batch_size"] = args["batchsize"]
+    if args["checkpoint"] != None:
+        train_args["checkpoint_file"] = args["checkpoint"]
+    if args["statistics"] != None:
+        train_args["statistic_folder"] = args["statistics"]
     
 
 train(**train_args)
 
+if __name__ == "__main__":
+    main()
