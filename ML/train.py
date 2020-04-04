@@ -1,16 +1,14 @@
 import skimage.io as io
 import skimage.transform as trans
-from keras.models import *
-from keras.layers import *
-from keras.optimizers import *
-from keras import utils as np_utils
-from keras import backend as keras
+import tensorflow as tf
+from tensorflow.keras import backend as keras
 from skimage import exposure
-from keras.callbacks import *
+from tensorflow.keras.callbacks import EarlyStopping, ReduceLROnPlateau
+from tensorflow.keras.callbacks import CSVLogger, TensorBoard, ModelCheckpoint
 from sklearn.preprocessing import LabelBinarizer
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import classification_report
-from keras.preprocessing.image import ImageDataGenerator
+from tensorflow.keras.preprocessing.image import ImageDataGenerator
 from imutils import paths
 import matplotlib.pyplot as plt
 import numpy as np
@@ -19,16 +17,22 @@ import random
 import pickle
 import cv2
 import os
-from ML.model import mynet
+
+from model import mynet
 # set the matplotlib backend so figures can be saved in the background
 import matplotlib
 matplotlib.use("Agg")
+
+MIN_LR = 0.0000001
+BASE_PATIENCE = 6
+FACTOR = 0.2
+TARGET_SIZE = (256, 256)
 
 
 #generates batches
 def trainGenerator(batch_size,train_path, aug_dict,image_color_mode = "grayscale",
                     mask_color_mode = "grayscale",image_save_prefix  = "image",mask_save_prefix  = "mask",
-                    flag_multi_class = False,num_class = 2,save_to_dir = None,target_size = (256,256),seed = None):
+                    flag_multi_class = False,num_class = 2,save_to_dir = None,target_size = TARGET_SIZE,seed = None):
     '''
     can generate image and mask at the same time
     use the same seed for image_datagen and mask_datagen to ensure the transformation for image and mask is the same
@@ -91,10 +95,11 @@ def train(train_path, validation_path, epochs = 100, batch_size = 32,
     model_checkpoint = ModelCheckpoint(checkpoint_file, monitor='loss',
                                        verbose=1, save_best_only=True)
     
-    early_stopping = EarlyStopping(monitor='loss', patience=7) #patience provides number of epocs befour this function will be activated
-    reduce_lr = ReduceLROnPlateau(monitor='val_loss', factor=0.2, patience=5, min_lr=0.000001) #factor is a scaling fator to learning rate
+    early_stopping = EarlyStopping(monitor='loss', patience=BASE_PATIENCE + 2) #patience provides number of epocs befour this function will be activated
+    reduce_lr = ReduceLROnPlateau(monitor='val_loss', factor=FACTOR, 
+                                  patience=BASE_PATIENCE, min_lr=MIN_LR) #factor is a scaling fator to learning rate
     
-    callback_list = [early_stopping, reduce_lr]
+    callback_list = [model_checkpoint, early_stopping, reduce_lr]
     if statistic_folder != None:
         csv_logger = CSVLogger(statistic_folder + '/history.csv')
         # tensorboard_logger = TensorBoard(log_dir= statistic_folder +'/tensorboard', histogram_freq=1, batch_size=32,
@@ -103,9 +108,9 @@ def train(train_path, validation_path, epochs = 100, batch_size = 32,
         #                                                                 embeddings_metadata=None, embeddings_data=None, update_freq='epoch')
         callback_list.append(csv_logger)
         
-    model.fit_generator(myGene,steps_per_epoch=1000,epochs=epochs,
+    model.fit_generator(myGene,steps_per_epoch=3000,epochs=epochs,
                         callbacks=callback_list, 
-                        validation_data = valGene, validation_steps=400)
+                        validation_data = valGene, validation_steps=1000)
 
 ap = argparse.ArgumentParser()
 ap.add_argument("-t", "--train", required=True,
