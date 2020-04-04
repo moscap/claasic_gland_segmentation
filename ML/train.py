@@ -142,7 +142,7 @@ def main():
         train_args["statistic_folder"] = args["statistics"]
     
 
-train(**train_args)
+    train(**train_args)
 
 if __name__ == "__main__":
     main()
