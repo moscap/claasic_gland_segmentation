@@ -71,8 +71,9 @@ def valGenerator(image_path, mask_path):
     img,mask = adjustData(img,mask)
     yield (img,mask)
 
-def train(train_path, validation_path, model_type = MODEL_BASE_TYPE, epochs = 100, batch_size = 32, 
-          checkpoint_file = './checkpoint.hdf5', statistic_folder = None, save_to_dir = None):
+def train(train_path, validation_path, model_type = MODEL_BASE_TYPE, epochs = 100, 
+          batch_size = 32, checkpoint_file = './checkpoint.hdf5', 
+          history_file = 'history.csv', statistic_folder = None, save_to_dir = None):
     
     epochs = int(epochs)
     batch_size = int(batch_size)
@@ -110,7 +111,7 @@ def train(train_path, validation_path, model_type = MODEL_BASE_TYPE, epochs = 10
     
     callback_list = [model_checkpoint, early_stopping, reduce_lr]
     if statistic_folder != None:
-        csv_logger = CSVLogger(statistic_folder + '/history.csv')
+        csv_logger = CSVLogger(statistic_folder + history_file)
         # tensorboard_logger = TensorBoard(log_dir= statistic_folder +'/tensorboard', histogram_freq=1, batch_size=32,
         #                                                                 write_graph=True, write_grads=False, write_images=False,
         #                                                                 embeddings_freq=0, embeddings_layer_names=None,
@@ -133,6 +134,8 @@ def main():
     	help="number of epochs")
     ap.add_argument("-c", "--checkpoint", required=False,
     	help="path to checkpoint hdf5 file")
+    ap.add_argument("-hist", "--history", required=False,
+    	help="name of cvsv file with trainig history")
     ap.add_argument("-stat", "--statistics", required=False,
     	help="statistics folder")
     ap.add_argument("-type", "--type", required=False,
@@ -153,6 +156,8 @@ def main():
         train_args["statistic_folder"] = args["statistics"]
     if args["type"] != None:
         train_args["model_type"] = args["type"]
+    if args["history"] != None:
+        train_args["history_file"] = args["history"]
 
     train(**train_args)
 
