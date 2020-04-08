@@ -30,6 +30,7 @@ def ML_foo(watershed, image):
     
     for j in range(1, classes + 1):
         buf_mask = np.uint8(np.where(label == j, 1, 0)) #picking out concrete region
+        
         contours, hierarchy = cv.findContours(buf_mask,cv.RETR_LIST,cv.CHAIN_APPROX_SIMPLE)[-2:] #finding it's countour in open-cv format
         idx = 0
         for cnt in contours:
@@ -38,7 +39,7 @@ def ML_foo(watershed, image):
             samples.append(image[y:y+h, x:x+w])
             
             
-    predicted = ml.predict(ml.containerTestGenerator(samples), './ML/32B3L.hdf5', len(samples))
+    predicted = ml.predict(ml.containerTestGenerator(samples), './ML/checkpoint.hdf5', len(samples))
     for idx, pred in enumerate(predicted):
         if np.argmax(pred) == 1:
             label[label == idx + 1] = 0
@@ -60,7 +61,7 @@ def post_process(mask, image, filename):
     ax[1].imshow(mask * new_mask, cmap=plt.cm.gray, interpolation='nearest')
     ax[1].set_title('Очищенная маска')  
     plt.tight_layout()
-    plt.savefig("../masks/" + filename + ".png")
+    plt.savefig("../../masks/" + filename + ".png")
     plt.show()
     
     c_watershed = cv.cvtColor(np.uint8(watershed), cv.COLOR_GRAY2BGR) 
@@ -69,7 +70,7 @@ def post_process(mask, image, filename):
         c_watershed[watershed == i] = [i, 255 - i, 255]
     
     
-    cv.imwrite("../masks/mmask.png" , new_mask * 255)
+    cv.imwrite("../../masks/mmask.png" , new_mask * 255)
     
     return watershed, new_mask
         
@@ -118,7 +119,7 @@ if not images[0] is None:
        print(img.shape)
        
        img = make_sp(img, 10, 8, 120, str(i))       
-       cv.imwrite("../res/" + str(i) + ".png" , img * 255)
+       cv.imwrite("../../res/" + str(i) + ".png" , img * 255)
        
        i = i + 1       
        print(time.time() - start_time)
