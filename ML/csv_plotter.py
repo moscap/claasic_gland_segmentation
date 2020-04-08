@@ -3,10 +3,11 @@ import argparse
 import matplotlib.pyplot as plt
 import matplotlib
 
-ACCURACY = 'acc'
+ACCURACY = 'accuracy'
 LOSS = 'loss'
-VAL_ACC = 'val_acc'
+VAL_ACC = 'val_accuracy'
 VAL_LOSS = 'val_loss'
+EPOCH = 'epoch'
 
 def csv_plotter(file_obj, plots, title='', save_path = None):
     epoch = []  
@@ -22,15 +23,15 @@ def csv_plotter(file_obj, plots, title='', save_path = None):
     
     reader = csv.DictReader(file_obj, delimiter=',')
     for line in reader:
-        epoch.append(int(line["epoch"]))
+        epoch.append(int(line[EPOCH]))
         if ACCURACY in plots:
-            accuracy.append(float(line["acc"]))
+            accuracy.append(float(line[ACCURACY]))
         if LOSS in plots:
-            loss.append(float(line["loss"]))
+            loss.append(float(line[LOSS]))
         if VAL_ACC in plots:
-            val_accuracy.append(float(line["val_acc"]))
+            val_accuracy.append(float(line[VAL_ACC]))
         if VAL_LOSS in plots:
-            val_loss.append(float(line["val_loss"]))
+            val_loss.append(float(line[VAL_LOSS]))
         
     matplotlib.rcParams.update({'font.size': 16})   
     fig, ax = plt.subplots(figsize=(20, 10))   

@@ -18,7 +18,7 @@ import pickle
 import cv2
 import os
 
-from model import mynet
+from model import mynet, densenet
 # set the matplotlib backend so figures can be saved in the background
 import matplotlib
 matplotlib.use("Agg")
@@ -27,6 +27,8 @@ MIN_LR = 0.0000001
 BASE_PATIENCE = 6
 FACTOR = 0.2
 TARGET_SIZE = (256, 256)
+MODEL_BASE_TYPE = 'std'
+MODEL_DENSE_TYPE = 'dense'
 
 
 #generates batches
@@ -69,7 +71,7 @@ def valGenerator(image_path, mask_path):
     img,mask = adjustData(img,mask)
     yield (img,mask)
 
-def train(train_path, validation_path, epochs = 100, batch_size = 32, 
+def train(train_path, validation_path, model_type = MODEL_BASE_TYPE, epochs = 100, batch_size = 32, 
           checkpoint_file = './checkpoint.hdf5', statistic_folder = None, save_to_dir = None):
     
     epochs = int(epochs)
@@ -88,10 +90,17 @@ def train(train_path, validation_path, epochs = 100, batch_size = 32,
                     horizontal_flip=True,
                     fill_mode='nearest')
     
-    myGene = trainGenerator(batch_size, train_path, data_gen_args, save_to_dir = None)
+    myGene = trainGenerator(int(batch_size), train_path, data_gen_args, save_to_dir = None)
     valGene = trainGenerator(8, validation_path, data_val_args, save_to_dir = None)
     
-    model = mynet()
+    if model_type == MODEL_BASE_TYPE:
+        model = mynet()
+    elif model_type == MODEL_DENSE_TYPE:
+        model = densenet()
+    else:
+        print('Incorrect model type')
+        return
+    
     model_checkpoint = ModelCheckpoint(checkpoint_file, monitor='loss',
                                        verbose=1, save_best_only=True)
     
@@ -126,6 +135,8 @@ def main():
     	help="path to checkpoint hdf5 file")
     ap.add_argument("-stat", "--statistics", required=False,
     	help="statistics folder")
+    ap.add_argument("-type", "--type", required=False,
+    	help="model type: std or dense")
     
     args = vars(ap.parse_args())
     
@@ -140,7 +151,8 @@ def main():
         train_args["checkpoint_file"] = args["checkpoint"]
     if args["statistics"] != None:
         train_args["statistic_folder"] = args["statistics"]
-    
+    if args["type"] != None:
+        train_args["model_type"] = args["type"]
 
     train(**train_args)
 
