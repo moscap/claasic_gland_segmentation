@@ -40,9 +40,6 @@ val_x, val_y = Load(val_x, val_y, '../NN/val')
 tr_x, tr_y = Load(tr_x, tr_y, '../NN/train')    
 print("Detected " + str(len(tr_x) + len(tr_y)) + " images in train and " + str(len(val_x) + len(val_y))  + "images in validation.")
     
-# lb = LabelBinarizer()
-# tr_y = lb.fit_transform(tr_y)
-# val_y = lb.transform(val_y)
 tr_y = np_utils.to_categorical(tr_y, NUM_CLASSES)
 val_y = np_utils.to_categorical(val_y, NUM_CLASSES)
 

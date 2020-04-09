@@ -27,85 +27,33 @@ import matplotlib
 matplotlib.use("Agg")
 
 MIN_LR = 0.0000001
-SHAPE_CORRECTION = (1,)
 BASE_PATIENCE = 6
 FACTOR = 0.2
-TARGET_SIZE = (256, 256)
 MODEL_BASE_TYPE = 'std'
 MODEL_DENSE_TYPE = 'dense'
-GLANDS = 'glands'
-NONGLANDS = 'nonglands'
-
-LINUX = 'Linux'
-WINDOWS = 'Windows'
-
+BATCH_SIZE = 16
+VAL_BATCH_SIZE = 8
+ROTATION_RANGE = 15
+EPOCHS = 300
 
 #generates batches
-def trainGenerator(batch_size,train_path, aug_dict,image_color_mode = "grayscale",
-                    mask_color_mode = "grayscale",image_save_prefix  = "image",mask_save_prefix  = "mask",
-                    flag_multi_class = False,num_class = 2,save_to_dir = None,target_size = TARGET_SIZE,seed = None):
-    '''
-    can generate image and mask at the same time
-    use the same seed for image_datagen and mask_datagen to ensure the transformation for image and mask is the same
-    if you want to visualize the results of generator, set save_to_dir = "your path"
-    '''
+def myTrainGenerator(btch_size, data_x, data_y, aug_dict):
     image_datagen = ImageDataGenerator(**aug_dict) #making class object
-    image_generator = image_datagen.flow_from_directory( #setting properties
-        train_path,
-        classes = None, #classes wil be set as array of subfolders names
-        class_mode = "categorical", #to transorm them to 2D one-hot encoded labels
-        color_mode = image_color_mode,
-        target_size = target_size, #will be resized to this size
-        batch_size = batch_size,
-        save_to_dir = save_to_dir, #only augmented images will be saved
-        save_prefix  = image_save_prefix,
-        interpolation = "bilinear",
-        seed = seed)
-    return image_generator
-
-def myTrainGenerator(btch_size, data_x, data_y, aug_dict, image_color_mode = "grayscale",
-                    mask_color_mode = "grayscale",image_save_prefix  = "image",mask_save_prefix  = "mask",
-                    flag_multi_class = False,num_classes = 2,save_to_dir = None,target_size = (256,256),seed = None):
-
-    image_datagen = ImageDataGenerator(**aug_dict) #making class object
-    #image_datagen.fit(data_x)
     image_generator = image_datagen.flow(data_x, data_y, batch_size = btch_size)
 
     return image_generator
 
-
-def Load(samples_x, samples_y, path, num_classes = 2, as_gray = True):
-    imagePaths = sorted(list(paths.list_images(path + '/glands')))
-    additional = sorted(list(paths.list_images(path + '/nonglands'))) 
-    imagePaths.extend(additional)                    
-
-    for imgPath in imagePaths:
-        img = io.imread(imgPath,as_gray = as_gray)
-        img = cv2.resize(img, (256, 256), interpolation = cv2.INTER_LINEAR)
-        img = np.reshape(img, img.shape + SHAPE_CORRECTION)
-
-        cl = os.path.dirname(imgPath).split('/')[-1]
-        
-        # if cl == GLANDS:
-        #     cl = 0
-        # else:
-        #     cl = 1
-
-        samples_x.append(img)
-        samples_y.append(cl)
-    return samples_x, samples_y
-
-
-def Train(train_x, train_y, validation_x, validation_y, model_type = MODEL_BASE_TYPE, epochs = 300, 
-          batch_size = 16, checkpoint_file = './checkpoint.hdf5', 
+#starts traning
+def Train(train_x, train_y, validation_x, validation_y, 
+          model_type = MODEL_BASE_TYPE, epochs = EPOCHS, 
+          batch_size = BATCH_SIZE, checkpoint_file = './checkpoint.hdf5', 
           history_file = 'history.csv', statistic_folder = None, save_to_dir = None):
     
     data_gen_args = dict(vertical_flip=True,
                          horizontal_flip=True,
-                         #brightness_range=(-0.15, 0.15),
-                         rotation_range=10,
+                         rotation_range=ROTATION_RANGE,
                          fill_mode='nearest')
-    data_val_args = dict(rotation_range=10,
+    data_val_args = dict(rotation_range= 5.0,
                          width_shift_range=0.0,
                          height_shift_range=0.0,
                          shear_range=0.0,
@@ -113,50 +61,47 @@ def Train(train_x, train_y, validation_x, validation_y, model_type = MODEL_BASE_
                          horizontal_flip=True,
                          fill_mode='nearest')
     
-    myGene = myTrainGenerator(batch_size, train_x, train_y, data_gen_args,save_to_dir = None)# '/content/drive/My Drive/Diploma/aug')
-    valGene = myTrainGenerator(8,validation_x, validation_y, data_val_args, save_to_dir = None)
+    myGene = myTrainGenerator(batch_size, train_x, train_y, data_gen_args)
+    valGene = myTrainGenerator(VAL_BATCH_SIZE, validation_x, validation_y, data_val_args)
 
-    model = mynet()
-    model_checkpoint = ModelCheckpoint('/content/drive/My Drive/Diploma/32B3L_with_log.hdf5',
-                                      monitor='loss',verbose=1, save_best_only=True)
-    early_stopping = EarlyStopping(monitor='loss', patience=7) #ptiaence provides number of epocs befour this function will be activated
-    reduce_lr = ReduceLROnPlateau(monitor='val_loss', factor=0.2, patience=5, min_lr=0.000001) #factor is a scaling fator to learning rate
-    csv_logger = CSVLogger('/content/drive/My Drive/Diploma/logs/history.csv')
+    if(mdel_type == MODEL_BASE_TYPE):
+        model = mynet()
+    else:
+        model = densenet()
+        
+    model_checkpoint = ModelCheckpoint(checkpoint_file, monitor='loss',verbose=1, save_best_only=True)
+    early_stopping = EarlyStopping(monitor='loss', patience=BASE_PATIENCE + 2) #ptiaence provides number of epocs befour this function will be activated
+    reduce_lr = ReduceLROnPlateau(monitor='val_loss', factor=FACTOR, patience=BASE_PATIENCE, min_lr=MIN_LR) #factor is a scaling fator to learning rate
+    csv_logger = CSVLogger(history_file)
+    
     # tensorboard_logger = TensorBoard(log_dir='/content/drive/My Drive/Diploma/logs/tensorboard', histogram_freq=1, batch_size=batch_size,
     #                                                                 write_graph=True, write_grads=False, write_images=False,
     #                                                                 embeddings_freq=0, embeddings_layer_names=None,
     #                                                                 embeddings_metadata=None, embeddings_data=None, update_freq='epoch')
-    model.fit_generator(myGene,steps_per_epoch=3000,epochs=100,callbacks=[model_checkpoint, early_stopping, reduce_lr, csv_logger], 
-                        validation_data = valGene, validation_steps=1000)
+    model.fit_generator(myGene,steps_per_epoch=len(train_x) * 3 / BATCH_SIZE,
+                        epochs=100, callbacks=[model_checkpoint, early_stopping, reduce_lr, csv_logger], 
+                        validation_data = valGene, validation_steps=len(validation_x) * 3 / VAL_BATCH_SIZE)
 
-def train(train_path, validation_path, model_type = MODEL_BASE_TYPE, epochs = 300, 
-          batch_size = 16, checkpoint_file = './checkpoint.hdf5', 
+#prepare data
+def train(train_path, validation_path, model_type = MODEL_BASE_TYPE, epochs = EPOCHS, 
+          batch_size = BATCH_SIZE, checkpoint_file = './checkpoint.hdf5', 
           history_file = 'history.csv', statistic_folder = None, save_to_dir = None):
     
     epochs = int(epochs)
     batch_size = int(batch_size)
-    
-    data = np.load('../data.npz')
 
-    tr_x = data['tr_x']
-    tr_y = data['tr_y']
-    val_x = data['val_x']
-    val_y = data['val_y']
-    
-    print(np.asarray(tr_y).shape)
-    
-    # val_x, val_y = Load(val_x, val_y, validation_path)
-    # tr_x, tr_y = Load(tr_x, tr_y, train_path)    
-    # print("Detected " + str(len(tr_x) + len(tr_y)) + " images in train and " + str(len(val_x) + len(val_y))  + "images in validation.")
+    with np.load('../data.npz') as data:
+        tr_x = data['tr_x']
+        tr_y = data['tr_y']
+        val_x = data['val_x']
+        val_y = data['val_y']
+        
+        print(np.asarray(tr_y).shape)    
+        
+        Train(tr_x, tr_y, val_x, val_y, model_type, epochs, batch_size, checkpoint_file , 
+              history_file, statistic_folder, save_to_dir)
 
-    # lb = LabelBinarizer()
-    # tr_y = lb.fit_transform(tr_y)
-    # val_y = lb.transform(val_y)
-    
-    
-    Train(tr_x, tr_y, val_x, val_y, model_type, epochs, batch_size, checkpoint_file , 
-          history_file, statistic_folder, save_to_dir)
-
+#argparse
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("-t", "--train", required=True,
