@@ -21,25 +21,51 @@ import os
 import ML.test as ml
 import Classic.graph as graph
 import Classic.postprocess as pp
+
+BIAS_PORTION = 0.1
+AXIS_X = 1
+AXIS_Y = 0
     
 def ML_foo(watershed, image):
     mask = np.where(watershed > 0, 1, 0)
     label, classes = nd.label(mask)
     
     samples = []    
+    i = 0
     
     for j in range(1, classes + 1):
-        buf_mask = np.uint8(np.where(label == j, 1, 0)) #picking out concrete region
-        
+        buf_mask = np.uint8(np.where(label == j, 1, 0)) #picking out concrete region  
+        # kernel = pp.init_dilate_kernel(15, 15)
+        # buf_mask = nd.binary_dilation(buf_mask, kernel)
+        # buf_mask = np.uint8(np.where(buf_mask == 1, 1, 0))
         contours, hierarchy = cv.findContours(buf_mask,cv.RETR_LIST,cv.CHAIN_APPROX_SIMPLE)[-2:] #finding it's countour in open-cv format
         idx = 0
         for cnt in contours:
             idx += 1
+            
             x,y,w,h = cv.boundingRect(cnt) #making bounding rect
-            samples.append(image[y:y+h, x:x+w])
+            # bias = np.int(np.floor(BIAS_PORTION * max(w, h)))
+            
+            # bx, by = -bias, -bias
+            # bw, bh = 2 * bias, 2 * bias
+            
+            # y = max(0, min(image.shape[AXIS_Y] - 1, y + by)) #customizing to avoid index-is-out-of-range exception
+            # x = max(0, min(image.shape[AXIS_X] - 1, x + bx))
+            # w = max(1, w + bw)
+            # h = max(1, h + bh)
+            ny = max(1, min(image.shape[AXIS_Y] - 1, y + h))
+            nx = max(1, min(image.shape[AXIS_X] - 1, x + w))
+            
+            sample = copy.deepcopy(image[y:ny, x:nx])
+            sample_mask = buf_mask[y:ny, x:nx]
+            sample[sample_mask == 0] = 0
+            
+            samples.append(sample)
+            cv.imwrite("../../samples/" + str(i) + ".png" , sample)
+            i = i + 1
             
             
-    predicted = ml.predict(ml.containerTestGenerator(samples), './ML/checkpoint.hdf5', len(samples))
+    predicted = ml.predict(ml.containerTestGenerator(samples), './ML/32B3L_with_log.hdf5', len(samples))
     for idx, pred in enumerate(predicted):
         if np.argmax(pred) == 1:
             label[label == idx + 1] = 0
