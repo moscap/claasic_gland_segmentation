@@ -137,7 +137,7 @@ def train(train_path, validation_path, model_type = MODEL_BASE_TYPE, epochs = 30
     batch_size = int(batch_size)
     
     data = np.load('../data.npz')
-    
+
     tr_x = data['tr_x']
     tr_y = data['tr_y']
     val_x = data['val_x']
@@ -148,7 +148,7 @@ def train(train_path, validation_path, model_type = MODEL_BASE_TYPE, epochs = 30
     # val_x, val_y = Load(val_x, val_y, validation_path)
     # tr_x, tr_y = Load(tr_x, tr_y, train_path)    
     # print("Detected " + str(len(tr_x) + len(tr_y)) + " images in train and " + str(len(val_x) + len(val_y))  + "images in validation.")
-    
+
     # lb = LabelBinarizer()
     # tr_y = lb.fit_transform(tr_y)
     # val_y = lb.transform(val_y)

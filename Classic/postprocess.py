@@ -23,12 +23,13 @@ MASK_UPPER_TRESHOLD = 0.5
 MASK_MEDIAN_FILTER_SIZE = 3
 GAUSS_GRADIENT_SIGMA = 2
 PERIMETER_EROSION_FILTER_SHAPE = (3,3)
-PIXEL_REVIEW_MIN = -8
-PIXEL_REVIEW_MAX = 9
+PIXEL_REVIEW_MIN = -6
+PIXEL_REVIEW_MAX = 7
 AREA_TRESHOLD = 0.1
 BOUNDING_GLAND_CORRECTION = 0.07
 AXIS_Y = 0
 AXIS_X = 1
+CLEAR_ITERATIONS = 10
 
 #finding gaussian gradient filter of image
 def find_gaussian_gradient(image):
@@ -149,7 +150,7 @@ def clear_mask(mask):
     prev_label, total_classes = nd.label(st_bi_mask)#начальная сегментация
     perim_mask = np.zeros(mask.shape)
     
-    for j in range(15):
+    for j in range(CLEAR_ITERATIONS):
         print(j)
         mask, perim_mask, prev_label = clearing_step(mask, perim_mask, prev_label, total_classes)                     
                     
@@ -184,8 +185,10 @@ def mask_post_process(mask):
 def watershed_post_process(mask):
     watershed = np.where(mask == 0, 1, 0)
     watershed = nd.label(watershed)[0]
-    watershed = nd.watershed_ift(np.uint16(np.where(mask > 0, 1, 0)), watershed)
-    #watershed = np.uint16(skmorf.watershed(mask, watershed, watershed_line = True))
+    watershed[mask > 0] = -1
+    watershed += 1
+    #watershed = nd.watershed_ift(np.uint16(np.where(mask > 0, 1, 0)), watershed)
+    watershed = np.uint16(skmorf.watershed(mask, watershed, watershed_line = True))
     watershed = np.where(watershed > 1, PIXEL_MAX_VALUE, 0)
     
     label, classes = nd.label(watershed)    

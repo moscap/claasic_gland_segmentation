@@ -116,8 +116,7 @@ def densenet(pretrained_weights = None,input_size = (256,256,1)):
     conv2_4 = Conv2D(32, 1, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal')(batch2_3)
     conv2_4 = Conv2D(32, 3, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal')(conv2_4)
     cct2_1234 = concatenate([pool1,conv2_1,conv2_2,conv2_3,conv2_4] , axis = 3)
-    batch2_4 = BatchNormalization()(cct2_1234)
-    
+    batch2_4 = BatchNormalization()(cct2_1234)    
 
     dec2_1 = Conv2D(64, 1, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal')(batch2_4)
     pool2 = MaxPooling2D(pool_size=(2, 2))(dec2_1)
@@ -140,4 +139,9 @@ def densenet(pretrained_weights = None,input_size = (256,256,1)):
     if(pretrained_weights):
     	model.load_weights(pretrained_weights)
 
+<<<<<<< HEAD
     return model
+=======
+    return model
+
+>>>>>>> refs/remotes/origin/master
