@@ -36,11 +36,14 @@ def bad_foo(image, mask, path, i, j): #finding "nongland" regions
     mask[mask > 0] = 1
     num = 0
     
+    img = copy.deepcopy(image)
+    img[mask > 0] = 0
+    
     while num < j: #doing actions until desired number of "nongland" regions were riched
         if num % ROTATION_STEP == 0:
             angle = np.random.randint(0, len(ROTATION_ANGLES))
             angle = ROTATION_ANGLES[angle]
-            image = imutils.rotate_bound(image, angle)
+            img = imutils.rotate_bound(img, angle)
             mask = imutils.rotate_bound(mask, angle)
     
         x = np.random.randint(0, image.shape[AXIS_X] - 1) #generating random x,y,w,h
@@ -59,11 +62,14 @@ def bad_foo(image, mask, path, i, j): #finding "nongland" regions
                 np.float(w) / h > 1 / RATIO_TRESHOLD and
                 np.float(w) / h < RATIO_TRESHOLD
             ):
-            patch = cv.resize(image[y:ny,x:nx], RESIZE_SHAPE, interpolation = cv.INTER_LINEAR)
+            patch = cv.resize(img[y:ny,x:nx], RESIZE_SHAPE, interpolation = cv.INTER_LINEAR)
             cv.imwrite(path + "/" + str(i + num) + ".png", patch) #some cases to approve the region
             num = num + 1
             
-def check_sample_with_bias(image, label, path, x, y, w, h, bx, by, bw, bh, i):    
+def check_sample_with_bias(image, label, path, x, y, w, h, bx, by, bw, bh, i):  
+    img = copy.deepcopy(image)
+    img[label == 0] = 0
+    
     y = max(0, min(image.shape[AXIS_Y] - 1, y + by)) #customizing to avoid index-is-out-of-range exception
     x = max(0, min(image.shape[AXIS_X] - 1, x + bx))
     w = max(1, w + bw)
@@ -79,7 +85,7 @@ def check_sample_with_bias(image, label, path, x, y, w, h, bx, by, bw, bh, i):
             np.float(w) / h > 1 / RATIO_TRESHOLD and
             np.float(w) / h < RATIO_TRESHOLD
         ):
-        patch = cv.resize(image[y:ny,x:nx], RESIZE_SHAPE, interpolation = cv.INTER_LINEAR)
+        patch = cv.resize(img[y:ny,x:nx], RESIZE_SHAPE, interpolation = cv.INTER_LINEAR)
         cv.imwrite(path + "/" + str(i) + ".png", patch) #some cases to approve the region
         i = i + 1
     return i

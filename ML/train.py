@@ -3,6 +3,8 @@ import skimage.transform as trans
 import tensorflow as tf
 from tensorflow.keras import backend as keras
 from skimage import exposure
+from tensorflow.keras import utils as np_utils
+from tensorflow.keras.datasets import cifar10
 from tensorflow.keras.callbacks import EarlyStopping, ReduceLROnPlateau
 from tensorflow.keras.callbacks import CSVLogger, TensorBoard, ModelCheckpoint
 from sklearn.preprocessing import LabelBinarizer
@@ -15,18 +17,27 @@ import numpy as np
 import argparse
 import random
 import pickle
+import platform
 import cv2
 import os
 
-from model import mynet
+from model import mynet, densenet
 # set the matplotlib backend so figures can be saved in the background
 import matplotlib
 matplotlib.use("Agg")
 
 MIN_LR = 0.0000001
+SHAPE_CORRECTION = (1,)
 BASE_PATIENCE = 6
 FACTOR = 0.2
 TARGET_SIZE = (256, 256)
+MODEL_BASE_TYPE = 'std'
+MODEL_DENSE_TYPE = 'dense'
+GLANDS = 'glands'
+NONGLANDS = 'nonglands'
+
+LINUX = 'Linux'
+WINDOWS = 'Windows'
 
 
 #generates batches
@@ -52,65 +63,99 @@ def trainGenerator(batch_size,train_path, aug_dict,image_color_mode = "grayscale
         seed = seed)
     return image_generator
 
-def valGenerator(image_path, mask_path):
-  imagePaths = sorted(list(paths.list_images(image_path)))
-  maskPaths = sorted(list(paths.list_images(mask_path)))
+def myTrainGenerator(btch_size, data_x, data_y, aug_dict, image_color_mode = "grayscale",
+                    mask_color_mode = "grayscale",image_save_prefix  = "image",mask_save_prefix  = "mask",
+                    flag_multi_class = False,num_classes = 2,save_to_dir = None,target_size = (256,256),seed = None):
 
-  for(image, msk) in zip(imagePaths, maskPaths):
-    img = io.imread(image, as_gray = True)
-    mask = io.imread(msk, as_gray = True)
+    image_datagen = ImageDataGenerator(**aug_dict) #making class object
+    #image_datagen.fit(data_x)
+    image_generator = image_datagen.flow(data_x, data_y, batch_size = btch_size)
 
-    img = np.reshape(img,img.shape+(1,))
-    img = np.reshape(img,(1,)+img.shape)
+    return image_generator
 
-    mask = np.reshape(mask,mask.shape+(1,))
-    mask = np.reshape(mask,(1,)+mask.shape)
 
-    img,mask = adjustData(img,mask)
-    yield (img,mask)
+def Load(samples_x, samples_y, path, num_classes = 2, as_gray = True):
+    imagePaths = sorted(list(paths.list_images(path + '/glands')))
+    additional = sorted(list(paths.list_images(path + '/nonglands'))) 
+    imagePaths.extend(additional)                    
 
-def train(train_path, validation_path, epochs = 100, batch_size = 32, 
-          checkpoint_file = './checkpoint.hdf5', statistic_folder = None, save_to_dir = None):
+    for imgPath in imagePaths:
+        img = io.imread(imgPath,as_gray = as_gray)
+        img = cv2.resize(img, (256, 256), interpolation = cv2.INTER_LINEAR)
+        img = np.reshape(img, img.shape + SHAPE_CORRECTION)
+
+        cl = os.path.dirname(imgPath).split('/')[-1]
+        
+        # if cl == GLANDS:
+        #     cl = 0
+        # else:
+        #     cl = 1
+
+        samples_x.append(img)
+        samples_y.append(cl)
+    return samples_x, samples_y
+
+
+def Train(train_x, train_y, validation_x, validation_y, model_type = MODEL_BASE_TYPE, epochs = 300, 
+          batch_size = 16, checkpoint_file = './checkpoint.hdf5', 
+          history_file = 'history.csv', statistic_folder = None, save_to_dir = None):
+    
+    data_gen_args = dict(vertical_flip=True,
+                         horizontal_flip=True,
+                         #brightness_range=(-0.15, 0.15),
+                         rotation_range=10,
+                         fill_mode='nearest')
+    data_val_args = dict(rotation_range=10,
+                         width_shift_range=0.0,
+                         height_shift_range=0.0,
+                         shear_range=0.0,
+                         zoom_range=0.0,
+                         horizontal_flip=True,
+                         fill_mode='nearest')
+    
+    myGene = myTrainGenerator(batch_size, train_x, train_y, data_gen_args,save_to_dir = None)# '/content/drive/My Drive/Diploma/aug')
+    valGene = myTrainGenerator(8,validation_x, validation_y, data_val_args, save_to_dir = None)
+
+    model = mynet()
+    model_checkpoint = ModelCheckpoint('/content/drive/My Drive/Diploma/32B3L_with_log.hdf5',
+                                      monitor='loss',verbose=1, save_best_only=True)
+    early_stopping = EarlyStopping(monitor='loss', patience=7) #ptiaence provides number of epocs befour this function will be activated
+    reduce_lr = ReduceLROnPlateau(monitor='val_loss', factor=0.2, patience=5, min_lr=0.000001) #factor is a scaling fator to learning rate
+    csv_logger = CSVLogger('/content/drive/My Drive/Diploma/logs/history.csv')
+    # tensorboard_logger = TensorBoard(log_dir='/content/drive/My Drive/Diploma/logs/tensorboard', histogram_freq=1, batch_size=batch_size,
+    #                                                                 write_graph=True, write_grads=False, write_images=False,
+    #                                                                 embeddings_freq=0, embeddings_layer_names=None,
+    #                                                                 embeddings_metadata=None, embeddings_data=None, update_freq='epoch')
+    model.fit_generator(myGene,steps_per_epoch=3000,epochs=100,callbacks=[model_checkpoint, early_stopping, reduce_lr, csv_logger], 
+                        validation_data = valGene, validation_steps=1000)
+
+def train(train_path, validation_path, model_type = MODEL_BASE_TYPE, epochs = 300, 
+          batch_size = 16, checkpoint_file = './checkpoint.hdf5', 
+          history_file = 'history.csv', statistic_folder = None, save_to_dir = None):
     
     epochs = int(epochs)
     batch_size = int(batch_size)
     
-    data_gen_args = dict(vertical_flip=True,
-                    horizontal_flip=True,
-                    #brightness_range=(-0.05, 0.05),
-                    rotation_range=10,
-                    fill_mode='nearest')
-    data_val_args = dict(rotation_range=10,
-                    width_shift_range=0.0,
-                    height_shift_range=0.0,
-                    shear_range=0.0,
-                    zoom_range=0.0,
-                    horizontal_flip=True,
-                    fill_mode='nearest')
+    data = np.load('../data.npz')
     
-    myGene = trainGenerator(batch_size, train_path, data_gen_args, save_to_dir = None)
-    valGene = trainGenerator(8, validation_path, data_val_args, save_to_dir = None)
+    tr_x = data['tr_x']
+    tr_y = data['tr_y']
+    val_x = data['val_x']
+    val_y = data['val_y']
     
-    model = mynet()
-    model_checkpoint = ModelCheckpoint(checkpoint_file, monitor='loss',
-                                       verbose=1, save_best_only=True)
+    print(np.asarray(tr_y).shape)
     
-    early_stopping = EarlyStopping(monitor='loss', patience=BASE_PATIENCE + 2) #patience provides number of epocs befour this function will be activated
-    reduce_lr = ReduceLROnPlateau(monitor='val_loss', factor=FACTOR, 
-                                  patience=BASE_PATIENCE, min_lr=MIN_LR) #factor is a scaling fator to learning rate
+    # val_x, val_y = Load(val_x, val_y, validation_path)
+    # tr_x, tr_y = Load(tr_x, tr_y, train_path)    
+    # print("Detected " + str(len(tr_x) + len(tr_y)) + " images in train and " + str(len(val_x) + len(val_y))  + "images in validation.")
     
-    callback_list = [model_checkpoint, early_stopping, reduce_lr]
-    if statistic_folder != None:
-        csv_logger = CSVLogger(statistic_folder + '/history.csv')
-        # tensorboard_logger = TensorBoard(log_dir= statistic_folder +'/tensorboard', histogram_freq=1, batch_size=32,
-        #                                                                 write_graph=True, write_grads=False, write_images=False,
-        #                                                                 embeddings_freq=0, embeddings_layer_names=None,
-        #                                                                 embeddings_metadata=None, embeddings_data=None, update_freq='epoch')
-        callback_list.append(csv_logger)
-        
-    model.fit_generator(myGene,steps_per_epoch=3000,epochs=epochs,
-                        callbacks=callback_list, 
-                        validation_data = valGene, validation_steps=1000)
+    # lb = LabelBinarizer()
+    # tr_y = lb.fit_transform(tr_y)
+    # val_y = lb.transform(val_y)
+    
+    
+    Train(tr_x, tr_y, val_x, val_y, model_type, epochs, batch_size, checkpoint_file , 
+          history_file, statistic_folder, save_to_dir)
 
 def main():
     ap = argparse.ArgumentParser()
@@ -124,8 +169,12 @@ def main():
     	help="number of epochs")
     ap.add_argument("-c", "--checkpoint", required=False,
     	help="path to checkpoint hdf5 file")
+    ap.add_argument("-hist", "--history", required=False,
+    	help="name of cvsv file with trainig history")
     ap.add_argument("-stat", "--statistics", required=False,
     	help="statistics folder")
+    ap.add_argument("-type", "--type", required=False,
+    	help="model type: std or dense")
     
     args = vars(ap.parse_args())
     
@@ -140,7 +189,10 @@ def main():
         train_args["checkpoint_file"] = args["checkpoint"]
     if args["statistics"] != None:
         train_args["statistic_folder"] = args["statistics"]
-    
+    if args["type"] != None:
+        train_args["model_type"] = args["type"]
+    if args["history"] != None:
+        train_args["history_file"] = args["history"]
 
     train(**train_args)
 

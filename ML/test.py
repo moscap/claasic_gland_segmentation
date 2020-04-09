@@ -4,7 +4,7 @@ import numpy as np
 import argparse
 import cv2 as cv
 import os
-from ML.model import mynet
+from model import mynet
 import platform
 
 NONGLANDS = 'nonglands'
