@@ -27,7 +27,7 @@ BIAS_PORTION = 0.1
 BIG_SHIFT_STEP = 3
 ROTATION_STEP = 3
 STEPS_TO_TRY = 10
-AUG_STEPS = 32
+AUG_STEPS = 10
 
 AXIS_X = 1
 AXIS_Y = 0
@@ -161,14 +161,6 @@ def main():
             angle = ROTATION_ANGLES[angle]
             img = imutils.rotate_bound(img, angle)
             mask = imutils.rotate_bound(mask, angle)
-        
-            if (k // 2) % 2 == 1:
-                cv.flip(img, 0)
-                cv.flip(mask, 0)
-                
-            if k % 2 == 1:
-                cv.flip(img, 1)
-                cv.flip(mask, 1)
                 
             j = segmentation_foo(img, mask, args["glands"], i) #generating "gland" regions
             bad_foo(img, mask, args["nonglands"], i, j - i) #and "nongland" regions here
