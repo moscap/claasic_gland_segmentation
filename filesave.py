@@ -11,7 +11,7 @@ GLANDS = 'glands'
 NONGLANDS = 'nonglands'
 NUM_CLASSES = 2
 
-def Load(samples_x, samples_y, path, num_classes = 2, as_gray = True):
+def Load(samples_x, samples_y, path, num_classes = 2, as_gray = False):
     imagePaths = sorted(list(paths.list_images(path + '/glands')))
     additional = sorted(list(paths.list_images(path + '/nonglands'))) 
     imagePaths.extend(additional)                    
@@ -19,7 +19,7 @@ def Load(samples_x, samples_y, path, num_classes = 2, as_gray = True):
     for imgPath in imagePaths:
         img = io.imread(imgPath,as_gray = as_gray)
         img = cv2.resize(img, (256, 256), interpolation = cv2.INTER_LINEAR)
-        img = np.reshape(img, img.shape + SHAPE_CORRECTION)
+        # img = np.reshape(img, img.shape + SHAPE_CORRECTION)
 
         cl = os.path.dirname(imgPath).split('/')[-1]
         if cl == GLANDS:
@@ -45,4 +45,4 @@ val_y = np_utils.to_categorical(val_y, NUM_CLASSES)
 
 print(np.asarray(tr_x).shape, tr_y.shape)
 
-np.savez('data', tr_x=tr_x, tr_y=tr_y, val_x=val_x, val_y=val_y)  
+np.savez('color_new', tr_x=tr_x, tr_y=tr_y, val_x=val_x, val_y=val_y)  

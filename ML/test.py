@@ -4,7 +4,7 @@ import numpy as np
 import argparse
 import cv2 as cv
 import os
-from model import mynet
+from ML.model import mynet, densenet, smallnet
 import platform
 
 NONGLANDS = 'nonglands'
@@ -34,7 +34,7 @@ def containerTestGenerator(samples):
         yield img
         
 def predict(testGene, weights_path, lenth):
-    model = mynet()
+    model = smallnet()
     model.load_weights(weights_path)
     results = model.predict_generator(testGene, lenth, verbose=VERBOSE)
     return results

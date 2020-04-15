@@ -4,10 +4,10 @@ from tensorflow.keras.layers import *
 from tensorflow.keras.optimizers import Adam
 from tensorflow.keras import backend as keras
 
+LEARNING_RATE = 1e-3
 
 
-
-def mynet(pretrained_weights = None,input_size = (256,256,1)):
+def mynet(pretrained_weights = None,input_size = (256,256,1), learning_rate = LEARNING_RATE):
     start = Input(input_size)
     conv0 = Conv2D(16, 3, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal')(start)
     conv0 = Conv2D(16, 3, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal')(conv0)
@@ -32,7 +32,7 @@ def mynet(pretrained_weights = None,input_size = (256,256,1)):
 
     model = Model(inputs = start, outputs = final)
 
-    model.compile(optimizer = 'adam', loss = 'binary_crossentropy', metrics = ['accuracy'])
+    model.compile(optimizer = Adam(lr = learning_rate), loss = 'binary_crossentropy', metrics = ['accuracy'])
     
     model.summary()
 
@@ -41,7 +41,40 @@ def mynet(pretrained_weights = None,input_size = (256,256,1)):
 
     return model
 
-def densenet(pretrained_weights = None,input_size = (256,256,1)):
+def smallnet(pretrained_weights = None, input_size = (256,256,1), learning_rate = LEARNING_RATE):
+    start = Input(input_size)
+    conv0 = Conv2D(16, 3, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal')(start)
+    conv0 = Conv2D(16, 3, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal')(conv0)
+    conv0 = BatchNormalization()(conv0)
+    pool0 = MaxPooling2D(pool_size=(2, 2))(conv0)
+    
+    conv1 = Conv2D(32, 3, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal')(pool0)
+    conv1 = Conv2D(32, 3, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal')(conv1)
+    conv1 = BatchNormalization()(conv1)
+    pool1 = MaxPooling2D(pool_size=(2, 2))(conv1)
+    
+    conv2 = Conv2D(16, 1, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal')(pool1)
+    conv2 = Conv2D(8, 1, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal')(conv2)
+    conv2 = BatchNormalization()(conv2)
+    pool2 = MaxPooling2D(pool_size=(4, 4))(conv2)
+    
+    flatten = Flatten()(pool2)
+    dense = Dense(32, activation = 'relu', kernel_initializer = 'he_normal')(flatten)
+    dense = BatchNormalization()(dense)
+    final = Dense(2, activation = 'sigmoid', kernel_initializer = 'he_normal')(dense)    
+
+    model = Model(inputs = start, outputs = final)
+
+    model.compile(optimizer = Adam(lr = learning_rate), loss = 'binary_crossentropy', metrics = ['accuracy'])
+    
+    model.summary()
+
+    if(pretrained_weights):
+    	model.load_weights(pretrained_weights)
+
+    return model
+
+def densenet(pretrained_weights = None,input_size = (256,256,1), learning_rate = LEARNING_RATE):
     first = Input(input_size)
     conv0_1 = Conv2D(16, 3, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal')(first)
     conv0_1 = Conv2D(16, 3, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal')(conv0_1)
@@ -127,7 +160,7 @@ def densenet(pretrained_weights = None,input_size = (256,256,1)):
 
     model = Model(inputs = first, outputs = final)
 
-    model.compile(optimizer = 'adam', loss = 'binary_crossentropy', metrics = ['accuracy'])
+    model.compile(optimizer = Adam(lr = learning_rate), loss = 'binary_crossentropy', metrics = ['accuracy'])
     
     model.summary()
 

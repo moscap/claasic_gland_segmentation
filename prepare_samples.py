@@ -27,7 +27,7 @@ BIAS_PORTION = 0.1
 BIG_SHIFT_STEP = 3
 ROTATION_STEP = 3
 STEPS_TO_TRY = 10
-AUG_STEPS = 10
+AUG_STEPS = 3
 
 AXIS_X = 1
 AXIS_Y = 0
@@ -35,6 +35,7 @@ AXIS_Y = 0
 def bad_foo(image, mask, path, i, j): #finding "nongland" regions
     mask[mask > 0] = 1
     num = 0
+    img = image
     
     img = copy.deepcopy(image)
     img[mask > 0] = 0
@@ -152,7 +153,7 @@ def main():
     for imagePath, maskPath in zip(imagePaths, maskPaths):
         print(imagePath + " - " + maskPath)
         img = cv.imread(imagePath)
-        img = cv.cvtColor(img, cv.COLOR_BGR2GRAY)
+        #img = cv.cvtColor(img, cv.COLOR_BGR2GRAY)
         
         mask = cv.imread(maskPath)
         mask = cv.cvtColor(mask, cv.COLOR_BGR2GRAY)
