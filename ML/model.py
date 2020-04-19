@@ -28,7 +28,7 @@ def mynet(pretrained_weights = None,input_size = (256,256,1), learning_rate = LE
     drop = Dropout(0.3)(flatten)
     dense = Dense(64, activation = 'relu', kernel_initializer = 'he_normal')(drop)
     dense = BatchNormalization()(dense)
-    final = Dense(2, activation = 'sigmoid', kernel_initializer = 'he_normal')(dense)    
+    final = Dense(1, activation = 'sigmoid', kernel_initializer = 'he_normal')(dense)    
 
     model = Model(inputs = start, outputs = final)
 
@@ -56,12 +56,13 @@ def smallnet(pretrained_weights = None, input_size = (256,256,1), learning_rate 
     conv2 = Conv2D(16, 1, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal')(pool1)
     conv2 = Conv2D(8, 1, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal')(conv2)
     conv2 = BatchNormalization()(conv2)
-    pool2 = MaxPooling2D(pool_size=(4, 4))(conv2)
+    pool2 = AveragePooling2D(pool_size=(4, 4))(conv2)
     
     flatten = Flatten()(pool2)
-    dense = Dense(32, activation = 'relu', kernel_initializer = 'he_normal')(flatten)
+    drop = Dropout(0.25)(flatten)
+    dense = Dense(32, activation = 'relu', kernel_initializer = 'he_normal')(drop)
     dense = BatchNormalization()(dense)
-    final = Dense(2, activation = 'sigmoid', kernel_initializer = 'he_normal')(dense)    
+    final = Dense(1, activation = 'sigmoid', kernel_initializer = 'he_normal')(dense)    
 
     model = Model(inputs = start, outputs = final)
 
@@ -156,7 +157,7 @@ def densenet(pretrained_weights = None,input_size = (256,256,1), learning_rate =
     drop = Dropout(0.3)(flatten)
     dense = Dense(64, activation = 'relu', kernel_initializer = 'he_normal')(drop)
     dense = BatchNormalization()(dense)
-    final = Dense(2, activation = 'sigmoid', kernel_initializer = 'he_normal')(dense)    
+    final = Dense(1, activation = 'sigmoid', kernel_initializer = 'he_normal')(dense)    
 
     model = Model(inputs = first, outputs = final)
 

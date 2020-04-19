@@ -18,10 +18,11 @@ import imutils
 
 ROTATION_ANGLES = [0, 90, 180, 270]
 MIN_REGION_AREA_RATIO = 0.7
+MAX_REGION_AREA_RATIO = 0.9
 REGION_AREA_TRESHOLD = 400
 RESIZE_SHAPE = (256, 256)
 RATIO_TRESHOLD = 3.0
-GENERATING_MAX_SIZE = 250
+GENERATING_MAX_SIZE = 200
 GENERATING_MIN_SIZE = 1
 BIAS_PORTION = 0.1
 BIG_SHIFT_STEP = 3
@@ -32,10 +33,10 @@ AUG_STEPS = 3
 AXIS_X = 1
 AXIS_Y = 0
 
-def bad_foo(image, mask, path, i, j): #finding "nongland" regions
+def bad_foo(image, mask, mapp,  path, i, j): #finding "nongland" regions
     mask[mask > 0] = 1
     num = 0
-    img = image
+    # img = image
     
     img = copy.deepcopy(image)
     img[mask > 0] = 0
@@ -46,6 +47,7 @@ def bad_foo(image, mask, path, i, j): #finding "nongland" regions
             angle = ROTATION_ANGLES[angle]
             img = imutils.rotate_bound(img, angle)
             mask = imutils.rotate_bound(mask, angle)
+            mapp = imutils.rotate_bound(mapp, angle)
     
         x = np.random.randint(0, image.shape[AXIS_X] - 1) #generating random x,y,w,h
         y = np.random.randint(0, image.shape[AXIS_Y] - 1)        
@@ -59,17 +61,25 @@ def bad_foo(image, mask, path, i, j): #finding "nongland" regions
         summ = np.sum(roi) #counting "nongland" area       
         if (
                 np.float(summ) / (w * h) > MIN_REGION_AREA_RATIO and 
+                np.float(summ) / (w * h) < MAX_REGION_AREA_RATIO and
                 w * h > REGION_AREA_TRESHOLD and 
                 np.float(w) / h > 1 / RATIO_TRESHOLD and
                 np.float(w) / h < RATIO_TRESHOLD
             ):
             patch = cv.resize(img[y:ny,x:nx], RESIZE_SHAPE, interpolation = cv.INTER_LINEAR)
-            cv.imwrite(path + "/" + str(i + num) + ".png", patch) #some cases to approve the region
+            map_patch = cv.resize(mapp[y:ny,x:nx], RESIZE_SHAPE, interpolation = cv.INTER_LINEAR)
+            final = np.zeros((patch.shape[0], patch.shape[1], 4))
+            final[:,:,0] = patch[:, :, 0] 
+            final[:,:,1] = patch[:, :, 1]
+            final[:,:,2] = patch[:, :, 2]
+            final[:,:,3] = map_patch 
+            cv.imwrite(path + "/" + str(i + num) + ".png", final) #some cases to approve the region
             num = num + 1
             
-def check_sample_with_bias(image, label, path, x, y, w, h, bx, by, bw, bh, i):  
-    img = copy.deepcopy(image)
-    img[label == 0] = 0
+def check_sample_with_bias(image, label, mapp, path, x, y, w, h, bx, by, bw, bh, i):  
+    # img = copy.deepcopy(image)
+    # img[label == 0] = 0
+    img = image
     
     y = max(0, min(image.shape[AXIS_Y] - 1, y + by)) #customizing to avoid index-is-out-of-range exception
     x = max(0, min(image.shape[AXIS_X] - 1, x + bx))
@@ -87,13 +97,19 @@ def check_sample_with_bias(image, label, path, x, y, w, h, bx, by, bw, bh, i):
             np.float(w) / h < RATIO_TRESHOLD
         ):
         patch = cv.resize(img[y:ny,x:nx], RESIZE_SHAPE, interpolation = cv.INTER_LINEAR)
-        cv.imwrite(path + "/" + str(i) + ".png", patch) #some cases to approve the region
+        map_patch = cv.resize(mapp[y:ny,x:nx], RESIZE_SHAPE, interpolation = cv.INTER_LINEAR)
+        final = np.zeros((patch.shape[0], patch.shape[1], 4))
+        final[:,:,0] = patch[:, :, 0] 
+        final[:,:,1] = patch[:, :, 1]
+        final[:,:,2] = patch[:, :, 2]
+        final[:,:,3] = map_patch 
+        cv.imwrite(path + "/" + str(i) + ".png", final) #some cases to approve the region
         i = i + 1
     return i
         
     
 
-def segmentation_foo(image, mask, path, i): #constructing "gland" samples    
+def segmentation_foo(image, mask, mapp, path, i): #constructing "gland" samples    
     mask[mask > 0] = 1
     label, classes = nd.label(mask) #separating "gland" regions
     
@@ -110,7 +126,7 @@ def segmentation_foo(image, mask, path, i): #constructing "gland" samples
                 continue
             
             bx, by, bw, bh = np.random.randint(-bias, bias, 4) #random modificaions                
-            i = check_sample_with_bias(image, label, path, x, y, w, h, bx, by, bw, bh, i)                
+            i = check_sample_with_bias(image, label, mapp,  path, x, y, w, h, bx, by, bw, bh, i)                
             
             if i % BIG_SHIFT_STEP == 0:
                 k = copy.deepcopy(i)      
@@ -126,7 +142,7 @@ def segmentation_foo(image, mask, path, i): #constructing "gland" samples
                         bh = np.random.randint(-7 * bias, -5 * bias)
                         bw = np.random.randint(-small_bias, 0)
                         
-                    k = check_sample_with_bias(image, label, path, x, y, w, h, bx, by, bw, bh, i)
+                    k = check_sample_with_bias(image, label, mapp, path, x, y, w, h, bx, by, bw, bh, i)
                     steps = steps + 1 
                     
                 i = copy.deepcopy(k)            
@@ -139,6 +155,8 @@ def main():
     	help="path to dataset of images")
     ap.add_argument("-m", "--masks", required=True,
     	help="path to dataset of masks")
+    ap.add_argument("-mp", "--maps", required=True,
+    	help="path to dataset of maps")
     ap.add_argument("-g", "--glands", required=True,
     	help="path to save glands patterns")
     ap.add_argument("-ng", "--nonglands", required=True,
@@ -148,12 +166,16 @@ def main():
     
     imagePaths = sorted(list(paths.list_images(args["images"]))) #reading images and annotations paths 
     maskPaths = sorted(list(paths.list_images(args["masks"])))
+    mapPaths = sorted(list(paths.list_images(args["maps"])))
     
     i = 0
-    for imagePath, maskPath in zip(imagePaths, maskPaths):
-        print(imagePath + " - " + maskPath)
+    for imagePath, maskPath, mapPath in zip(imagePaths, maskPaths, mapPaths):
+        print(imagePath + " - " + maskPath + " - " + mapPath)
         img = cv.imread(imagePath)
         #img = cv.cvtColor(img, cv.COLOR_BGR2GRAY)
+        
+        mapp = cv.imread(mapPath)
+        mapp = cv.cvtColor(mapp, cv.COLOR_BGR2GRAY)
         
         mask = cv.imread(maskPath)
         mask = cv.cvtColor(mask, cv.COLOR_BGR2GRAY)
@@ -162,9 +184,10 @@ def main():
             angle = ROTATION_ANGLES[angle]
             img = imutils.rotate_bound(img, angle)
             mask = imutils.rotate_bound(mask, angle)
+            mapp = imutils.rotate_bound(mapp, angle)
                 
-            j = segmentation_foo(img, mask, args["glands"], i) #generating "gland" regions
-            bad_foo(img, mask, args["nonglands"], i, j - i) #and "nongland" regions here
+            j = segmentation_foo(img, mask, mapp, args["glands"], i) #generating "gland" regions
+            bad_foo(img, mask, mapp, args["nonglands"], i, j - i) #and "nongland" regions here
             i = copy.deepcopy(j)
             
     print(i)

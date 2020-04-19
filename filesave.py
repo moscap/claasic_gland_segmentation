@@ -23,9 +23,9 @@ def Load(samples_x, samples_y, path, num_classes = 2, as_gray = False):
 
         cl = os.path.dirname(imgPath).split('/')[-1]
         if cl == GLANDS:
-             cl = 0
-        else:
              cl = 1
+        else:
+             cl = 0
 
         samples_x.append(img)
         samples_y.append(cl)
@@ -40,9 +40,9 @@ val_x, val_y = Load(val_x, val_y, '../NN/val')
 tr_x, tr_y = Load(tr_x, tr_y, '../NN/train')    
 print("Detected " + str(len(tr_x) + len(tr_y)) + " images in train and " + str(len(val_x) + len(val_y))  + "images in validation.")
     
-tr_y = np_utils.to_categorical(tr_y, NUM_CLASSES)
-val_y = np_utils.to_categorical(val_y, NUM_CLASSES)
+# tr_y = np_utils.to_categorical(tr_y, NUM_CLASSES)
+# val_y = np_utils.to_categorical(val_y, NUM_CLASSES)
 
-print(np.asarray(tr_x).shape, tr_y.shape)
+print(np.asarray(tr_x).shape, np.asarray(tr_y).shape)
 
-np.savez('color_new', tr_x=tr_x, tr_y=tr_y, val_x=val_x, val_y=val_y)  
+np.savez('stdmapinvert', tr_x=tr_x, tr_y=tr_y, val_x=val_x, val_y=val_y)  

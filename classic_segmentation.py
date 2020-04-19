@@ -22,11 +22,12 @@ import ML.test as ml
 import Classic.graph as graph
 import Classic.postprocess as pp
 
+RESIZE_SHAPE = (256, 256)
 BIAS_PORTION = 0.1
 AXIS_X = 1
 AXIS_Y = 0
     
-def ML_foo(watershed, image, color_image):
+def ML_foo(watershed, image, color_image, mapp):
     mask = np.where(watershed > 0, 1, 0)
     label, classes = nd.label(mask)
     
@@ -57,17 +58,24 @@ def ML_foo(watershed, image, color_image):
             nx = max(1, min(image.shape[AXIS_X] - 1, x + w))
             
             sample = copy.deepcopy(color_image[y:ny, x:nx])
+            map_sample = mapp[y:ny, x:nx]
             sample_mask = buf_mask[y:ny, x:nx]
             sample[sample_mask == 0] = 0
+            final = np.zeros((sample.shape[0], sample.shape[1], 4))
+            final[:,:,0] = sample[:, :, 0] 
+            final[:,:,1] = sample[:, :, 1]
+            final[:,:,2] = sample[:, :, 2]
+            final[:,:,3] = map_sample 
             
-            samples.append(sample)
-            cv.imwrite("../samples/" + str(i) + ".png" , sample)
+            samples.append(final)
+            cv.imwrite("../samples/" + str(i) + ".png" , final)
             i = i + 1
             
             
-    predicted = ml.predict(ml.containerTestGenerator(samples), './ML/small1.hdf5', len(samples))
+    predicted = ml.predict(ml.containerTestGenerator(samples), './ML/stdmap.hdf5', len(samples))
     for idx, pred in enumerate(predicted):
-        if np.argmax(pred) == 1:
+        print(pred)
+        if pred < 0.5: #np.argmax(pred) == 0:
             label[label == idx + 1] = 0
     return label
 
@@ -78,7 +86,7 @@ def post_process(mask, image, color_image, filename):
     new_mask = pp.mask_post_process(copy.deepcopy(mask))  
     mmask = copy.deepcopy(mask * new_mask)         
     watershed, classes = pp.watershed_post_process(mmask)
-    watershed = ML_foo(watershed, image, color_image)
+    watershed = ML_foo(watershed, image, color_image, mask)
       
     fig, axes = plt.subplots(ncols=2, figsize=(20, 8), sharex=True, sharey=True)
     ax = axes.ravel()
@@ -111,7 +119,8 @@ def make_sp(image, color_image, rays, dots, radius, filename):
 #    watershed = nd.binary_dilation(watershed, kernel)   
     
     
-    new_im = cv.cvtColor(np.uint8(image), cv.COLOR_GRAY2BGR)    
+    # new_im = cv.cvtColor(np.uint8(image), cv.COLOR_GRAY2BGR) 
+    new_im = np.stack([image / 255.0 for i in range(3)], axis=-1)
     new_im[watershed > 0, 1:2] = 0
      
     

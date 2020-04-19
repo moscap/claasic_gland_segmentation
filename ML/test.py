@@ -29,12 +29,12 @@ def fileTestGenerator(test_path, as_gray = True):
 def containerTestGenerator(samples):
     for sample in samples:
         img = cv.resize(sample, RESIZE_SHAPE, interpolation = cv.INTER_LINEAR)
-        img = np.reshape(img, img.shape + SHAPE_CORRECTION)
+        # img = np.reshape(img, img.shape + SHAPE_CORRECTION)
         img = np.reshape(img, SHAPE_CORRECTION + img.shape)
         yield img
         
 def predict(testGene, weights_path, lenth):
-    model = smallnet()
+    model = mynet(input_size = (256, 256, 4))
     model.load_weights(weights_path)
     results = model.predict_generator(testGene, lenth, verbose=VERBOSE)
     return results

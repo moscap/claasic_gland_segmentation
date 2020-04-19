@@ -188,7 +188,7 @@ def watershed_post_process(mask):
     watershed[mask > 0] = -1
     watershed += 1
     #watershed = nd.watershed_ift(np.uint16(np.where(mask > 0, 1, 0)), watershed)
-    watershed = np.uint16(skmorf.watershed(mask, watershed, watershed_line = True))
+    # watershed = np.uint16(skmorf.watershed(mask, watershed, watershed_line = True))
     watershed = np.where(watershed > 1, PIXEL_MAX_VALUE, 0)
     
     label, classes = nd.label(watershed)    

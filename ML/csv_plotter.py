@@ -33,7 +33,7 @@ def csv_plotter(file_obj, plots, title='', save_path = None):
         if VAL_LOSS in plots:
             val_loss.append(float(line[VAL_LOSS]))
         
-    matplotlib.rcParams.update({'font.size': 16})   
+    matplotlib.rcParams.update({'fontsize': 16})   
     fig, ax = plt.subplots(figsize=(20, 10))   
     ax.set_title('', fontsize=20)
     

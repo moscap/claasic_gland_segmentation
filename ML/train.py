@@ -58,9 +58,12 @@ class InputGenerator:
         while True:
             idx = np.random.choice(self.n_imgs, self.batch_size)
             img_batch = np.stack([self.__aug__(self.imgs[i, ...]) for i in idx])
-            label_batch = np.stack([self.labels[i, ...] for i in idx])
+            label_batch = np.stack([np.float(self.labels[i, ...]) for i in idx])
             yield img_batch, label_batch, [None]
     def __aug__(self, img):
+        if(self.mode == VALIDATION_MODE):
+            return img
+        
         angle = np.random.randint(0, len(ROTATION_ANGLES))
         angle = ROTATION_ANGLES[angle]
         img = imutils.rotate_bound(img, angle)
@@ -105,18 +108,18 @@ def Train(train_x, train_y, validation_x, validation_y,
     # myGene = myTrainGenerator(batch_size, train_x, train_y, data_gen_args)
     # valGene = myTrainGenerator(VAL_BATCH_SIZE, validation_x, validation_y, data_val_args)
     
-    TrainGenerator = InputGenerator(train_x, train_y, batch_size).__iter__()
-    ValidationGenerator = InputGenerator(validation_x, validation_y, VAL_BATCH_SIZE).__iter__()
+    TrainGenerator = InputGenerator(train_x, train_y, batch_size)
+    ValidationGenerator = InputGenerator(validation_x, validation_y, VAL_BATCH_SIZE)
 
     if(model_type == MODEL_BASE_TYPE):
-        model = mynet()
+        model = mynet(input_size = (256, 256, 4))
     elif(model_type == MODEL_DENSE_TYPE):
-        model = densenet()
+        model = densenet(input_size = (256, 256, 3))
     else:
-        model = smallnet(input_size = (256, 256, 3), learning_rate = 0.01)
+        model = smallnet(input_size = (256, 256, 4), learning_rate = 0.01)
         
-    model_checkpoint = ModelCheckpoint(checkpoint_file, monitor='loss',verbose=1, save_best_only=True)
-    early_stopping = EarlyStopping(monitor='loss', patience=BASE_PATIENCE + 2) #ptiaence provides number of epocs befour this function will be activated
+    model_checkpoint = ModelCheckpoint(checkpoint_file, monitor='val_loss',verbose=1, save_best_only=True)
+    early_stopping = EarlyStopping(monitor='val_loss', patience=BASE_PATIENCE + 2) #ptiaence provides number of epocs befour this function will be activated
     reduce_lr = ReduceLROnPlateau(monitor='val_loss', factor=FACTOR, patience=BASE_PATIENCE, min_lr=MIN_LR) #factor is a scaling fator to learning rate
     csv_logger = CSVLogger( statistic_folder + history_file)
     
@@ -124,9 +127,9 @@ def Train(train_x, train_y, validation_x, validation_y,
     #                                                                 write_graph=True, write_grads=False, write_images=False,
     #                                                                 embeddings_freq=0, embeddings_layer_names=None,
     #                                                                 embeddings_metadata=None, embeddings_data=None, update_freq='epoch')
-    model.fit_generator(TrainGenerator, steps_per_epoch=len(train_x) * AUG_FACTOR / batch_size,
+    model.fit_generator(iter(TrainGenerator), steps_per_epoch=len(train_x) * AUG_FACTOR / batch_size,
                         epochs=EPOCHS, callbacks=[model_checkpoint, early_stopping, reduce_lr, csv_logger], 
-                        validation_data = ValidationGenerator, 
+                        validation_data = iter(ValidationGenerator), 
                         validation_steps=len(validation_x) * AUG_FACTOR / VAL_BATCH_SIZE)
 
 #prepare data
@@ -136,7 +139,7 @@ def train(train_path, validation_path, model_type = MODEL_BASE_TYPE, epochs = EP
     epochs = int(epochs)
     batch_size = int(batch_size)
 
-    data = np.load('./color_new.npz')
+    data = np.load('../stdmapinvert.npz')
     tr_x = data['tr_x']
     tr_y = data['tr_y']
     val_x = data['val_x']
