@@ -77,9 +77,9 @@ def bad_foo(image, mask, mapp,  path, i, j): #finding "nongland" regions
             num = num + 1
             
 def check_sample_with_bias(image, label, mapp, path, x, y, w, h, bx, by, bw, bh, i):  
-    # img = copy.deepcopy(image)
-    # img[label == 0] = 0
-    img = image
+    img = copy.deepcopy(image)
+    img[label == 0] = 0
+    # img = image
     
     y = max(0, min(image.shape[AXIS_Y] - 1, y + by)) #customizing to avoid index-is-out-of-range exception
     x = max(0, min(image.shape[AXIS_X] - 1, x + bx))
