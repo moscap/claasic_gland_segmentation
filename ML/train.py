@@ -58,7 +58,7 @@ class InputGenerator:
         while True:
             idx = np.random.choice(self.n_imgs, self.batch_size)
             img_batch = np.stack([self.__aug__(self.imgs[i, ...]) for i in idx])
-            label_batch = np.stack([np.float(self.labels[i, ...]) for i in idx])
+            label_batch = np.stack([self.labels[i, ...] for i in idx])
             yield img_batch, label_batch, [None]
     def __aug__(self, img):
         if(self.mode == VALIDATION_MODE):
@@ -78,45 +78,21 @@ class InputGenerator:
         return img
             
 
-            
-
-#generates batches
-def myTrainGenerator(btch_size, data_x, data_y, aug_dict):
-    image_datagen = ImageDataGenerator(**aug_dict) #making class object
-    image_generator = image_datagen.flow(data_x, data_y, batch_size = btch_size)
-
-    return image_generator
-
 #starts traning
 def Train(train_x, train_y, validation_x, validation_y, 
           model_type = MODEL_BASE_TYPE, epochs = EPOCHS, 
           batch_size = BATCH_SIZE, checkpoint_file = './checkpoint.hdf5', 
           history_file = 'history.csv', statistic_folder = './', save_to_dir = None):
-    # data_gen_args = dict(vertical_flip=True,
-    #                      horizontal_flip=True,
-    #                      rotation_range=ROTATION_RANGE,
-    #                      fill_mode='nearest')
-    # data_val_args = dict(rotation_range= 5.0,
-    #                      width_shift_range=0.0,
-    #                      height_shift_range=0.0,
-    #                      shear_range=0.0,
-    #                      zoom_range=0.0,
-    #                      horizontal_flip=True,
-    #                      fill_mode='nearest')  
-    
-    
-    # myGene = myTrainGenerator(batch_size, train_x, train_y, data_gen_args)
-    # valGene = myTrainGenerator(VAL_BATCH_SIZE, validation_x, validation_y, data_val_args)
     
     TrainGenerator = InputGenerator(train_x, train_y, batch_size)
     ValidationGenerator = InputGenerator(validation_x, validation_y, VAL_BATCH_SIZE)
 
     if(model_type == MODEL_BASE_TYPE):
-        model = mynet(input_size = (256, 256, 4))
+        model = mynet(input_size = (256, 256, 3))
     elif(model_type == MODEL_DENSE_TYPE):
         model = densenet(input_size = (256, 256, 3))
     else:
-        model = smallnet(input_size = (256, 256, 4), learning_rate = 0.01)
+        model = smallnet(input_size = (256, 256, 3), learning_rate = 0.01)
         
     model_checkpoint = ModelCheckpoint(checkpoint_file, monitor='val_loss',verbose=1, save_best_only=True)
     early_stopping = EarlyStopping(monitor='val_loss', patience=BASE_PATIENCE + 2) #ptiaence provides number of epocs befour this function will be activated
