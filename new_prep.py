@@ -15,10 +15,11 @@ import skimage.feature as skf
 import copy
 import os
 import imutils
+from PIL import Image
 
 ROTATION_ANGLES = [0, 90, 180, 270]
 MIN_REGION_AREA_RATIO = 0.7
-REGION_AREA_TRESHOLD = 400
+REGION_AREA_TRESHOLD = 100
 RESIZE_SHAPE = (256, 256)
 RATIO_TRESHOLD = 3.0
 GENERATING_MAX_SIZE = 200
@@ -27,7 +28,7 @@ BIAS_PORTION = 0.1
 BIG_SHIFT_STEP = 3
 ROTATION_STEP = 3
 STEPS_TO_TRY = 10
-AUG_STEPS = 3
+AUG_STEPS = 1
 GLAND = 'glands'
 NONGLAND = 'nonglands'
 MISS = 'miss'
@@ -49,10 +50,10 @@ def check_sample_with_bias(image, label, mask, path, x, y, w, h, bx, by, bw, bh,
     roi=np.where(label[y:ny,x:nx] > 0, 1, 0) #mask for "nongland" area
     summ = np.sum(roi) #counting "nongland" area  
     if (
-            np.float(summ) / (w * h) > MIN_REGION_AREA_RATIO and 
-            w * h > REGION_AREA_TRESHOLD and 
-            np.float(w) / h > 1.0 / RATIO_TRESHOLD and
-            np.float(w) / h < RATIO_TRESHOLD
+            np.float(summ) / (w * h) > MIN_REGION_AREA_RATIO #and 
+            # w * h > REGION_AREA_TRESHOLD #and 
+            # np.float(w) / h > 1.0 / RATIO_TRESHOLD and
+            # np.float(w) / h < RATIO_TRESHOLD
         ):
         patch = cv.resize(img[y:ny,x:nx], RESIZE_SHAPE, interpolation = cv.INTER_LINEAR)
         mask_patch = cv.resize(mask[y:ny,x:nx], RESIZE_SHAPE, interpolation = cv.INTER_LINEAR)
@@ -71,16 +72,41 @@ def test_region(patch, gt):
     patch_sum = np.sum(patch)
     mask_sum = np.sum(mask)
     
-    if np.float(mask_sum) / patch_sum > 0.85 and mask[mask.shape[AXIS_Y] // 2, mask.shape[AXIS_X] // 2] > 0:
+    if np.float(mask_sum) / patch_sum > 0.7 and mask[mask.shape[AXIS_Y] // 2, mask.shape[AXIS_X] // 2] > 0:
         return GLAND
-    elif np.float(mask_sum) / patch_sum < 0.15 and mask[mask.shape[AXIS_Y] // 2, mask.shape[AXIS_X] // 2] == 0:
+    elif np.float(mask_sum) / patch_sum < 0.3 and mask[mask.shape[AXIS_Y] // 2, mask.shape[AXIS_X] // 2] == 0:
         return NONGLAND
     else:
         return MISS
         
+
+def iou(x, y):
+    eps = 0.1
+    x_f = x.flatten()
+    y_f = y.flatten()
+    intersection = np.sum(x_f * y_f)
+    union = np.sum(x_f) + np.sum(y_f) - intersection
+    return (intersection + eps) / (union + eps)
+
+
+def test_region_2(patch, gt):
+    # Image.fromarray(patch * 200).show()
+    # Image.fromarray(gt * 255).show()
+    p = np.zeros_like(patch)
+    p[patch > 0] = 1
+    gt2 = gt * p
+    iou_value = iou(p, gt2)
+    
+    if iou_value > 0.45 and gt[gt.shape[AXIS_Y] // 2, gt.shape[AXIS_X] // 2] > 0:
+        return GLAND
+    elif iou_value < 0.45: #and gt[gt.shape[AXIS_Y] // 2, gt.shape[AXIS_X] // 2] == 0:
+        return NONGLAND
+    return MISS
+
     
 
-def segmentation_foo(image, mask, patch, path, i, mode): #constructing "gland" samples    
+def segmentation_foo(image, mask, patch, path, i, mode): #constructing "gland" samples 
+    img = copy.deepcopy(image)   
     mask[mask > 0] = 1 #mask pereparation
     patch[patch > 0] = 1 #patch preparation
     label, classes = nd.label(patch) #separating regions
@@ -88,42 +114,58 @@ def segmentation_foo(image, mask, patch, path, i, mode): #constructing "gland" s
     for j in range(1, classes + 1):
         patch_mask = np.uint8(np.where(label == j, 1, 0)) #picking out concrete region        
         contours, hierarchy = cv.findContours(patch_mask,cv.RETR_LIST,cv.CHAIN_APPROX_SIMPLE)[-2:] #finding it's countour in open-cv format
-        idx = 0
-        for cnt in contours:
-            idx += 1
-            x,y,w,h = cv.boundingRect(cnt) #making bounding rect
-            tipe = test_region(patch_mask[y:y+h, x:x+w], mask[y:y+h, x:x+w]) #now we knew region type
+        cnt = None
+        
+        if len(contours) > 1:
+            max_area = 0
+            for contour in contours:
+                x,y,w,h = cv.boundingRect(contour)
+                if w * h > max_area:
+                    max_area = w * h
+                    cnt = contour
+        else:
+            cnt = contours[0]
+        
+        x,y,w,h = cv.boundingRect(cnt) #making bounding rect
+        tipe = test_region_2(patch_mask[y:y+h, x:x+w], mask[y:y+h, x:x+w]) #now we knew region type
             
-            if tipe == MISS: #next step
-                continue
+        if tipe == NONGLAND:
+            img[label == j, 1:2] = 0
+        elif tipe == GLAND:
+            img[label == j, 0] = 0
+            img[label == j, 2] = 0
+        elif tipe == MISS:
+            img[label == j, 0] = mask[label == j] * 255#(img[label == j, 0] + img[label == j, 1] + img[label == j, 2]) // 3
+            img[label == j, 1] = img[label == j, 0]
+            img[label == j, 2] = img[label == j, 0]
             
-            if mode ==  TRAIN:
-                bias = np.floor(BIAS_PORTION * max(w, h)) #augmentation lower
-                if bias == 0: #too small region
-                    continue
-                
-                bx, by, bw, bh = np.random.randint(-bias, bias, 4) #random modificaions                
-                i = check_sample_with_bias(image, label, mask, path, x, y, w, h, bx, by, bw, bh, i, tipe)                
-                
-                if i % BIG_SHIFT_STEP == 0  and tipe == GLAND:
-                    k = copy.deepcopy(i)      
-                    steps = 0
-                    while k == i and steps < STEPS_TO_TRY:
-                        small_bias = max(bias // 3, 1)
-                        bx, by = np.random.randint(-small_bias, small_bias, 2) #random modificaions for big shift
+            continue
+            
+        i = check_sample_with_bias(image, label, mask, path, x, y, w, h, 0, 0, 0, 0, i, tipe)  
+
+        bias = np.floor(BIAS_PORTION * max(w, h)) #augmentation lower
+        if bias == 0: #too small region
+            continue            
+            
+        if i % BIG_SHIFT_STEP == 0  and tipe == GLAND:
+            k = copy.deepcopy(i)      
+            steps = 0
+            while k == i and steps < STEPS_TO_TRY:
+                small_bias = max(bias // 3, 1)
+                bx, by = np.random.randint(-small_bias, small_bias, 2) #random modificaions for big shift
+                    
+                if w > h:
+                    bw = np.random.randint(-7 * bias, -5 * bias)
+                    bh = np.random.randint(-small_bias, 0)
+                else:
+                    bh = np.random.randint(-7 * bias, -5 * bias)
+                    bw = np.random.randint(-small_bias, 0)
                         
-                        if w > h:
-                            bw = np.random.randint(-7 * bias, -5 * bias)
-                            bh = np.random.randint(-small_bias, 0)
-                        else:
-                            bh = np.random.randint(-7 * bias, -5 * bias)
-                            bw = np.random.randint(-small_bias, 0)
-                            
-                        k = check_sample_with_bias(image, label, mask, path, x, y, w, h, bx, by, bw, bh, i, tipe)
-                        steps = steps + 1 
-                    i = copy.deepcopy(k)  
-            else:
-                i = check_sample_with_bias(image, label, mask, path, x, y, w, h, 0, 0, 0, 0, i, tipe)
+                k = check_sample_with_bias(image, label, mask, path, x, y, w, h, bx, by, bw, bh, i, tipe)
+                steps = steps + 1 
+            i = copy.deepcopy(k)
+        
+    cv.imwrite(path + "/res/" + str(i) + ".png", img)    
     return i
 
 
@@ -160,12 +202,12 @@ def main():
         
         if args["mode"] == TRAIN:
             for k in range(AUG_STEPS): # "flip" augmentations     
-                angle = np.random.randint(0, len(ROTATION_ANGLES))
-                angle = ROTATION_ANGLES[angle]
+                # angle = np.random.randint(0, len(ROTATION_ANGLES))
+                # angle = ROTATION_ANGLES[angle]
                 
-                img = imutils.rotate_bound(img, angle)
-                mask = imutils.rotate_bound(mask, angle)
-                patch = imutils.rotate_bound(patch, angle)
+                # img = imutils.rotate_bound(img, angle)
+                # mask = imutils.rotate_bound(mask, angle)
+                # patch = imutils.rotate_bound(patch, angle)
                     
                 i = segmentation_foo(img, mask, patch, args["save"], i, args["mode"]) #generating regions
         else:
